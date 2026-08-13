@@ -1,6 +1,7 @@
 import { TYPE_CHART, TYPE_IDS, TYPES, effectiveness, typeById } from './chart-data.js';
 
 const STORAGE_KEY = 'typewise-progress-v1';
+const LEGACY_BACKUP_KEY = 'typewise-progress-v1-legacy-sessions';
 const TOTAL_MATCHUPS = TYPE_IDS.length * TYPE_IDS.length;
 const VALID_VALUES = [0, 0.5, 1, 2];
 const VALUE_LABELS = new Map([
@@ -39,12 +40,14 @@ const defaultSession = () => ({
 const defaultState = () => ({
   view: 'chart',
   mode: 'practice',
+  theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  axis: 'attack-rows',
   selected: 1,
-  mobileAttack: 'normal',
-  sessions: {
-    practice: defaultSession(),
-    test: defaultSession(),
+  mobileRows: {
+    attack: 'normal',
+    defense: 'normal',
   },
+  chart: defaultSession(),
   quick: {
     question: null,
     answer: null,
@@ -59,11 +62,19 @@ const elements = {
   chartPanel: document.querySelector('#chart-panel'),
   quickPanel: document.querySelector('#quick-panel'),
   viewTabs: [...document.querySelectorAll('.view-tab')],
-  modeButtons: [...document.querySelectorAll('[data-mode]')],
+  themeToggle: document.querySelector('#theme-toggle'),
+  themeToggleLabel: document.querySelector('#theme-toggle-label'),
+  feedbackToggle: document.querySelector('#feedback-toggle'),
+  feedbackTitle: document.querySelector('#feedback-title'),
   modeDescription: document.querySelector('#mode-description'),
+  axisToggle: document.querySelector('#axis-toggle'),
+  axisStatus: document.querySelector('#axis-status'),
+  axisDescription: document.querySelector('#axis-description'),
+  scrollNote: document.querySelector('#scroll-note'),
   palette: [...document.querySelectorAll('.answer-choice')],
   typeChart: document.querySelector('#type-chart'),
-  mobileAttacker: document.querySelector('#mobile-attacker'),
+  mobileRowType: document.querySelector('#mobile-row-type'),
+  mobileAxisLabel: document.querySelector('#mobile-axis-label'),
   mobileGrid: document.querySelector('#mobile-defender-grid'),
   pickerIcon: document.querySelector('#picker-icon'),
   mobileRowLabel: document.querySelector('#mobile-row-label'),
@@ -74,6 +85,7 @@ const elements = {
   answeredStat: document.querySelector('#answered-stat'),
   accuracyStat: document.querySelector('#accuracy-stat'),
   rowsStat: document.querySelector('#rows-stat'),
+  rowsStatLabel: document.querySelector('#rows-stat-label'),
   progressPercent: document.querySelector('#progress-percent'),
   progressFill: document.querySelector('#progress-fill'),
   prompt: document.querySelector('#matchup-prompt'),
@@ -114,7 +126,27 @@ function hasAnswer(answers, key) {
 }
 
 function currentSession() {
-  return state.sessions[state.mode];
+  return state.chart;
+}
+
+function rowsAreAttackers() {
+  return state.axis === 'attack-rows';
+}
+
+function matchupForVisibleCell(row, column) {
+  return rowsAreAttackers()
+    ? { attack: row, defense: column }
+    : { attack: column, defense: row };
+}
+
+function visibleCoordinates(attack, defense) {
+  return rowsAreAttackers()
+    ? { row: attack, column: defense }
+    : { row: defense, column: attack };
+}
+
+function currentMobileRow() {
+  return state.mobileRows[rowsAreAttackers() ? 'attack' : 'defense'];
 }
 
 function isType(id) {
@@ -137,6 +169,18 @@ function sanitizeSession(rawSession) {
     checked: Boolean(rawSession?.checked),
     reveal: Boolean(rawSession?.reveal),
     review: Boolean(rawSession?.review),
+  };
+}
+
+function migrateLegacySessions(rawSessions, preferredMode) {
+  const primary = sanitizeSession(rawSessions?.[preferredMode]);
+  const secondaryMode = preferredMode === 'practice' ? 'test' : 'practice';
+  const secondary = sanitizeSession(rawSessions?.[secondaryMode]);
+  return {
+    answers: { ...secondary.answers, ...primary.answers },
+    checked: false,
+    reveal: false,
+    review: false,
   };
 }
 
@@ -164,15 +208,23 @@ function loadState() {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!raw || typeof raw !== 'object') return fallback;
 
+    const mode = ['practice', 'test'].includes(raw.mode) ? raw.mode : fallback.mode;
+    if (!raw.chart && raw.sessions && !localStorage.getItem(LEGACY_BACKUP_KEY)) {
+      localStorage.setItem(LEGACY_BACKUP_KEY, JSON.stringify(raw.sessions));
+    }
     return {
       view: ['chart', 'quick'].includes(raw.view) ? raw.view : fallback.view,
-      mode: ['practice', 'test'].includes(raw.mode) ? raw.mode : fallback.mode,
+      mode,
+      theme: ['light', 'dark'].includes(raw.theme) ? raw.theme : fallback.theme,
+      axis: ['attack-rows', 'defense-rows'].includes(raw.axis) ? raw.axis : fallback.axis,
       selected: VALID_VALUES.includes(Number(raw.selected)) ? Number(raw.selected) : fallback.selected,
-      mobileAttack: isType(raw.mobileAttack) ? raw.mobileAttack : fallback.mobileAttack,
-      sessions: {
-        practice: sanitizeSession(raw.sessions?.practice),
-        test: sanitizeSession(raw.sessions?.test),
+      mobileRows: {
+        attack: isType(raw.mobileRows?.attack)
+          ? raw.mobileRows.attack
+          : (isType(raw.mobileAttack) ? raw.mobileAttack : fallback.mobileRows.attack),
+        defense: isType(raw.mobileRows?.defense) ? raw.mobileRows.defense : fallback.mobileRows.defense,
       },
+      chart: raw.chart ? sanitizeSession(raw.chart) : migrateLegacySessions(raw.sessions, mode),
       quick: sanitizeQuick(raw.quick),
     };
   } catch {
@@ -209,42 +261,39 @@ function typeIconMarkup(type, className = 'type-icon') {
 }
 
 function renderDesktopChart() {
+  const activeCell = elements.typeChart.querySelector('.chart-cell[tabindex="0"]');
+  const activeAttack = activeCell?.dataset.attack ?? TYPE_IDS[0];
+  const activeDefense = activeCell?.dataset.defense ?? TYPE_IDS[0];
+  const rowRole = rowsAreAttackers() ? 'attack' : 'defense';
+  const columnRole = rowsAreAttackers() ? 'defense' : 'attack';
   const headers = TYPES.map((type) => `
-    <th
-      class="type-col-head"
-      scope="col"
-      data-defense-header="${type.id}"
-      style="${typeStyle(type)}"
-      title="Defending ${type.name} type"
-    >
-      <span class="type-col-inner">
-        ${typeIconMarkup(type)}
-        <span class="sr-only">Defending ${type.name}</span>
+    <th class="type-col-head" scope="col" data-${columnRole}-header="${type.id}"
+      style="${typeStyle(type)}" title="${columnRole === 'attack' ? 'Attacking' : 'Defending'} ${type.name} type">
+      <span class="type-col-inner">${typeIconMarkup(type)}
+        <span class="sr-only">${columnRole === 'attack' ? 'Attacking' : 'Defending'} ${type.name}</span>
       </span>
     </th>
   `).join('');
 
-  const rows = TYPES.map((attackType, attackIndex) => {
-    const cells = TYPES.map((defenseType, defenseIndex) => `
-      <td data-axis-attack="${attackType.id}" data-axis-defense="${defenseType.id}">
-        <button
-          class="chart-cell matchup-input"
-          type="button"
-          tabindex="${attackIndex === 0 && defenseIndex === 0 ? '0' : '-1'}"
-          data-attack="${attackType.id}"
-          data-defense="${defenseType.id}"
-          aria-label="${attackType.name} attacking ${defenseType.name}, unanswered"
-        ><span class="cell-value" aria-hidden="true"></span></button>
-      </td>
-    `).join('');
-
+  const rows = TYPES.map((rowType) => {
+    const cells = TYPES.map((columnType) => {
+      const { attack, defense } = matchupForVisibleCell(rowType.id, columnType.id);
+      const attackType = typeById(attack);
+      const defenseType = typeById(defense);
+      return `
+        <td data-axis-attack="${attack}" data-axis-defense="${defense}">
+          <button class="chart-cell matchup-input" type="button"
+            tabindex="${attack === activeAttack && defense === activeDefense ? '0' : '-1'}"
+            data-attack="${attack}" data-defense="${defense}"
+            aria-label="${attackType.name} attacking ${defenseType.name}, unanswered"
+          ><span class="cell-value" aria-hidden="true"></span></button>
+        </td>
+      `;
+    }).join('');
     return `
-      <tr data-row="${attackType.id}">
-        <th class="type-row-head" scope="row" data-attack-header="${attackType.id}" style="${typeStyle(attackType)}">
-          <span class="row-type-label">
-            ${typeIconMarkup(attackType)}
-            <span>${attackType.name}</span>
-          </span>
+      <tr data-row="${rowType.id}">
+        <th class="type-row-head" scope="row" data-${rowRole}-header="${rowType.id}" style="${typeStyle(rowType)}">
+          <span class="row-type-label">${typeIconMarkup(rowType)}<span>${rowType.name}</span></span>
         </th>
         ${cells}
       </tr>
@@ -252,48 +301,48 @@ function renderDesktopChart() {
   }).join('');
 
   elements.typeChart.innerHTML = `
-    <thead>
-      <tr>
-        <th class="corner-cell" scope="col">
-          <span class="corner-directions">
-            <span>DEFEND <b aria-hidden="true">→</b></span>
-            <span>ATTACK <b aria-hidden="true">↓</b></span>
-          </span>
-        </th>
-        ${headers}
-      </tr>
-    </thead>
+    <caption class="sr-only">Interactive Pokémon effectiveness chart. Rows are ${rowRole === 'attack' ? 'attacking' : 'defending'} types and columns are ${columnRole === 'attack' ? 'attacking' : 'defending'} types.</caption>
+    <thead><tr>
+      <th class="corner-cell" scope="col"><span class="corner-directions">
+        <span>${columnRole.toUpperCase()} <b aria-hidden="true">→</b></span>
+        <span>${rowRole.toUpperCase()} <b aria-hidden="true">↓</b></span>
+      </span></th>
+      ${headers}
+    </tr></thead>
     <tbody>${rows}</tbody>
   `;
 }
 
 function renderMobileSelector() {
-  elements.mobileAttacker.innerHTML = TYPES.map(
+  elements.mobileRowType.innerHTML = TYPES.map(
     (type) => `<option value="${type.id}">${type.name}</option>`,
   ).join('');
-  elements.mobileAttacker.value = state.mobileAttack;
+  elements.mobileRowType.value = currentMobileRow();
   renderMobileRow();
 }
 
 function renderMobileRow() {
-  const attackType = typeById(state.mobileAttack);
-  elements.pickerIcon.src = attackType.icon;
-  elements.mobileRowLabel.textContent = `${attackType.name} row`;
+  const rowType = typeById(currentMobileRow());
+  const rowLabel = rowsAreAttackers() ? 'Attacking' : 'Defending';
+  elements.mobileRowType.value = rowType.id;
+  elements.mobileAxisLabel.textContent = `${rowLabel} type`;
+  elements.pickerIcon.src = rowType.icon;
+  elements.mobileRowLabel.textContent = `${rowType.name} ${rowLabel.toLowerCase()} row`;
 
-  elements.mobileGrid.innerHTML = TYPES.map((defenseType) => `
-    <button
-      class="defender-cell matchup-input"
-      type="button"
-      data-attack="${attackType.id}"
-      data-defense="${defenseType.id}"
-      style="${typeStyle(defenseType)}"
-      aria-label="${attackType.name} attacking ${defenseType.name}, unanswered"
-    >
-      ${typeIconMarkup(defenseType)}
-      <span class="defender-name">${defenseType.name}</span>
-      <span class="defender-answer" aria-hidden="true">·</span>
-    </button>
-  `).join('');
+  elements.mobileGrid.innerHTML = TYPES.map((columnType) => {
+    const { attack, defense } = matchupForVisibleCell(rowType.id, columnType.id);
+    const attackType = typeById(attack);
+    const defenseType = typeById(defense);
+    return `
+      <button class="defender-cell matchup-input" type="button"
+        data-attack="${attack}" data-defense="${defense}" style="${typeStyle(columnType)}"
+        aria-label="${attackType.name} attacking ${defenseType.name}, unanswered">
+        ${typeIconMarkup(columnType)}
+        <span class="defender-name">${columnType.name}</span>
+        <span class="defender-answer" aria-hidden="true">·</span>
+      </button>
+    `;
+  }).join('');
 }
 
 function selectMultiplier(value, shouldAnnounce = true) {
@@ -329,20 +378,58 @@ function setView(view, { focusPanel = false } = {}) {
   }
 }
 
-function setMode(mode) {
-  state.mode = mode;
-  elements.modeButtons.forEach((button) => {
-    const active = button.dataset.mode === mode;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
-  elements.modeDescription.textContent = mode === 'practice'
-    ? 'See feedback as you answer.'
-    : 'Feedback stays hidden until you check.';
-  elements.checkAnswers.hidden = mode !== 'test';
-  saveState();
+function setTheme(theme, { shouldAnnounce = false, shouldSave = true } = {}) {
+  state.theme = theme === 'dark' ? 'dark' : 'light';
+  const isDark = state.theme === 'dark';
+  document.documentElement.dataset.theme = state.theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#0d141c' : '#f6f1e7');
+  elements.themeToggle.setAttribute('aria-checked', String(isDark));
+  elements.themeToggle.setAttribute('aria-label', 'Dark mode');
+  elements.themeToggleLabel.textContent = 'Dark mode';
+  if (shouldSave) saveState();
+  if (shouldAnnounce) announce(`${isDark ? 'Dark' : 'Light'} mode on.`);
+}
+
+function setAxis(axis, { shouldAnnounce = true, shouldSave = true } = {}) {
+  state.axis = axis === 'defense-rows' ? 'defense-rows' : 'attack-rows';
+  const attackRows = rowsAreAttackers();
+  elements.axisStatus.textContent = attackRows ? 'Attack ↓ · Defend →' : 'Defend ↓ · Attack →';
+  elements.axisDescription.textContent = attackRows
+    ? 'Attacking types run down the left. Defending types run across the top.'
+    : 'Defending types run down the left. Attacking types run across the top.';
+  elements.rowsStatLabel.textContent = `${attackRows ? 'ATTACK' : 'DEFENSE'} ROWS CONFIRMED`;
+  elements.scrollNote.innerHTML = `<span>←</span> Scroll to see every ${attackRows ? 'defending' : 'attacking'} type <span>→</span>`;
+  renderDesktopChart();
+  renderMobileRow();
+  resetPrompt();
+  if (shouldSave) saveState();
   updateChartView();
-  announce(`${mode === 'practice' ? 'Practice' : 'Test'} mode selected.`);
+  if (shouldAnnounce) {
+    announce(`${attackRows ? 'Attacking' : 'Defending'} types are now rows; ${attackRows ? 'defending' : 'attacking'} types are columns.`);
+  }
+}
+
+function setMode(mode, { shouldAnnounce = true, shouldSave = true } = {}) {
+  const changed = state.mode !== mode;
+  state.mode = mode;
+  const instant = mode === 'practice';
+  if (changed) {
+    const session = currentSession();
+    session.checked = false;
+    session.reveal = false;
+    session.review = false;
+  }
+  elements.feedbackToggle.classList.toggle('is-instant', instant);
+  elements.feedbackToggle.setAttribute('aria-checked', String(instant));
+  elements.feedbackToggle.setAttribute('aria-label', 'Instant feedback');
+  elements.feedbackTitle.textContent = 'Instant feedback';
+  elements.modeDescription.textContent = instant
+    ? 'Correct each cell as you go.'
+    : 'Hide results until you check the table.';
+  elements.checkAnswers.hidden = mode !== 'test';
+  if (shouldSave) saveState();
+  updateChartView();
+  if (shouldAnnounce) announce(`${instant ? 'Instant feedback' : 'Score when ready'} selected.`);
 }
 
 function recordAnswer(attack, defense, value = state.selected, { advance = false } = {}) {
@@ -409,8 +496,11 @@ function getChartStats() {
     const [attack, defense] = key.split('|');
     return count + (effectiveness(attack, defense) === Number(answer) ? 1 : 0);
   }, 0);
-  const completeRows = TYPE_IDS.reduce((count, attack) => {
-    const complete = TYPE_IDS.every((defense) => hasAnswer(answers, cellKey(attack, defense)));
+  const completeRows = TYPE_IDS.reduce((count, row) => {
+    const complete = TYPE_IDS.every((column) => {
+      const { attack, defense } = matchupForVisibleCell(row, column);
+      return hasAnswer(answers, cellKey(attack, defense));
+    });
     return count + Number(complete);
   }, 0);
 
@@ -477,15 +567,16 @@ function updateStats() {
 
   elements.answeredStat.innerHTML = `${stats.marked} <small>/ ${TOTAL_MATCHUPS}</small>`;
   elements.accuracyStat.textContent = shouldShowAccuracy && stats.scored ? `${stats.accuracy}%` : '—';
-  elements.accuracyStat.title = shouldShowAccuracy ? 'Accuracy across scored cells' : 'Check your test to score every cell, including ×1 defaults';
+  elements.accuracyStat.title = shouldShowAccuracy ? 'Accuracy across scored cells' : 'Check the table to score every cell, including ×1 defaults';
   elements.rowsStat.innerHTML = `${stats.completeRows} <small>/ ${TYPE_IDS.length}</small>`;
   elements.progressPercent.textContent = `${progress}%`;
   elements.progressFill.style.width = `${progress}%`;
   elements.checkAnswers.disabled = false;
 
-  const rowAnswered = TYPE_IDS.filter((defense) =>
-    hasAnswer(session.answers, cellKey(state.mobileAttack, defense)),
-  ).length;
+  const rowAnswered = TYPE_IDS.filter((column) => {
+    const { attack, defense } = matchupForVisibleCell(currentMobileRow(), column);
+    return hasAnswer(session.answers, cellKey(attack, defense));
+  }).length;
   elements.mobileRowCount.textContent = `${rowAnswered} / ${TYPE_IDS.length}`;
 }
 
@@ -497,8 +588,8 @@ function updateChartControls() {
     : '<span class="eye-icon" aria-hidden="true"></span> Reveal chart';
   elements.revealChart.setAttribute('aria-pressed', String(session.reveal));
   elements.checkAnswers.innerHTML = session.checked
-    ? '<span aria-hidden="true">✓</span> Recheck answers'
-    : '<span aria-hidden="true">✓</span> Check answers';
+    ? '<span aria-hidden="true">✓</span> Recheck table'
+    : '<span aria-hidden="true">✓</span> Check table';
 }
 
 function renderResults() {
@@ -512,8 +603,8 @@ function renderResults() {
   const explicitlyComplete = stats.marked === TOTAL_MATCHUPS;
   const title = testSubmitted
     ? stats.correct === TOTAL_MATCHUPS
-      ? 'Perfect test. Every matchup mastered.'
-      : 'Test complete — here is your result.'
+      ? 'Perfect table. Every matchup mastered.'
+      : 'Table checked — here is your result.'
     : explicitlyComplete
       ? stats.correct === TOTAL_MATCHUPS
         ? 'Perfect chart. Every matchup mastered.'
@@ -588,22 +679,24 @@ function highlightAxes(attack, defense) {
 }
 
 function focusAdjacentCell(attack, defense, rowDelta, columnDelta, linearAdvance = false) {
-  let attackIndex = TYPE_IDS.indexOf(attack);
-  let defenseIndex = TYPE_IDS.indexOf(defense);
+  const visible = visibleCoordinates(attack, defense);
+  let rowIndex = TYPE_IDS.indexOf(visible.row);
+  let columnIndex = TYPE_IDS.indexOf(visible.column);
 
   if (linearAdvance) {
-    defenseIndex += 1;
-    if (defenseIndex >= TYPE_IDS.length) {
-      defenseIndex = 0;
-      attackIndex = (attackIndex + 1) % TYPE_IDS.length;
+    columnIndex += 1;
+    if (columnIndex >= TYPE_IDS.length) {
+      columnIndex = 0;
+      rowIndex = (rowIndex + 1) % TYPE_IDS.length;
     }
   } else {
-    attackIndex = (attackIndex + rowDelta + TYPE_IDS.length) % TYPE_IDS.length;
-    defenseIndex = (defenseIndex + columnDelta + TYPE_IDS.length) % TYPE_IDS.length;
+    rowIndex = (rowIndex + rowDelta + TYPE_IDS.length) % TYPE_IDS.length;
+    columnIndex = (columnIndex + columnDelta + TYPE_IDS.length) % TYPE_IDS.length;
   }
 
+  const targetMatchup = matchupForVisibleCell(TYPE_IDS[rowIndex], TYPE_IDS[columnIndex]);
   const target = elements.typeChart.querySelector(
-    `.chart-cell[data-attack="${TYPE_IDS[attackIndex]}"][data-defense="${TYPE_IDS[defenseIndex]}"]`,
+    `.chart-cell[data-attack="${targetMatchup.attack}"][data-defense="${targetMatchup.defense}"]`,
   );
   setActiveDesktopCell(target);
   target?.focus();
@@ -624,7 +717,7 @@ function checkAnswers() {
   saveState();
   updateChartView();
   const stats = getChartStats();
-  announce(`Test scored. ${stats.correct} of ${TOTAL_MATCHUPS} matchups are correct. Unmarked cells were scored as ${formatMultiplier(1)}.`);
+  announce(`Table scored. ${stats.correct} of ${TOTAL_MATCHUPS} matchups are correct. Unmarked cells were scored as ${formatMultiplier(1)}.`);
   elements.results.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -788,7 +881,7 @@ function openResetDialog(target) {
   const isChart = target === 'chart';
   elements.dialogTitle.textContent = isChart ? 'Reset your chart?' : 'Reset this quiz run?';
   elements.dialogCopy.textContent = isChart
-    ? `This clears every marked answer in your ${state.mode} chart. All cells return to the default ×1; your other mode is kept.`
+    ? 'This clears every marked answer in the chart. All cells return to the default ×1.'
     : 'This clears the Quick Quiz score, streak, and current question.';
   elements.confirmReset.textContent = isChart ? 'Reset chart' : 'Reset run';
   elements.dialog.showModal();
@@ -796,11 +889,11 @@ function openResetDialog(target) {
 
 function performReset() {
   if (resetTarget === 'chart') {
-    state.sessions[state.mode] = defaultSession();
+    state.chart = defaultSession();
     saveState();
     updateChartView();
     resetPrompt();
-    announce(`${state.mode === 'practice' ? 'Practice' : 'Test'} chart reset.`);
+    announce('Chart reset.');
   } else {
     state.quick = defaultState().quick;
     generateQuestion();
@@ -822,8 +915,16 @@ function bindEvents() {
     });
   });
 
-  elements.modeButtons.forEach((button) => {
-    button.addEventListener('click', () => setMode(button.dataset.mode));
+  elements.themeToggle.addEventListener('click', () => {
+    setTheme(state.theme === 'dark' ? 'light' : 'dark', { shouldAnnounce: true });
+  });
+
+  elements.feedbackToggle.addEventListener('click', () => {
+    setMode(state.mode === 'practice' ? 'test' : 'practice');
+  });
+
+  elements.axisToggle.addEventListener('click', () => {
+    setAxis(rowsAreAttackers() ? 'defense-rows' : 'attack-rows');
   });
 
   elements.palette.forEach((button) => {
@@ -911,12 +1012,13 @@ function bindEvents() {
     }
   });
 
-  elements.mobileAttacker.addEventListener('change', () => {
-    state.mobileAttack = elements.mobileAttacker.value;
+  elements.mobileRowType.addEventListener('change', () => {
+    const rowRole = rowsAreAttackers() ? 'attack' : 'defense';
+    state.mobileRows[rowRole] = elements.mobileRowType.value;
     saveState();
     renderMobileRow();
     updateChartView();
-    announce(`${typeById(state.mobileAttack).name} selected as the attacking type.`);
+    announce(`${typeById(currentMobileRow()).name} selected as the ${rowRole === 'attack' ? 'attacking' : 'defending'} type.`);
   });
 
   elements.mobileGrid.addEventListener('click', (event) => {
@@ -974,8 +1076,10 @@ function initialize() {
   renderDesktopChart();
   renderMobileSelector();
   bindEvents();
+  setTheme(state.theme, { shouldSave: false });
+  setAxis(state.axis, { shouldAnnounce: false, shouldSave: false });
   selectMultiplier(state.selected, false);
-  setMode(state.mode);
+  setMode(state.mode, { shouldAnnounce: false, shouldSave: false });
   setView(state.view);
   renderQuick();
   updateChartView();

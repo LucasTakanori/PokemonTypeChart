@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f6f1e7" />
+    <script>
+      try {
+        const saved = JSON.parse(localStorage.getItem('typewise-progress-v1'));
+        const theme = saved?.theme === 'dark' || saved?.theme === 'light'
+          ? saved.theme
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#0d141c' : '#f6f1e7';
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
     <meta
       name="description"
       content="Practice all 324 modern Pokémon type matchups with an interactive chart and quick quiz."
@@ -25,6 +37,17 @@
         <div class="header-meta">
           <span class="ruleset-pill"><span class="status-dot"></span> Modern chart</span>
           <span class="save-status" id="save-status" aria-live="polite">Saved locally</span>
+          <button
+            class="theme-toggle"
+            id="theme-toggle"
+            type="button"
+            role="switch"
+            aria-checked="false"
+            aria-label="Dark mode"
+          >
+            <span class="theme-toggle-icon" aria-hidden="true"></span>
+            <span id="theme-toggle-label">Dark mode</span>
+          </button>
         </div>
       </header>
 
@@ -76,7 +99,7 @@
               <div>
                 <p class="section-kicker">THE TRAINING GROUND</p>
                 <h2 id="workspace-title">Type Matchup Challenge</h2>
-                <p>Attacking types run down the left. Defending types run across the top.</p>
+                <p id="axis-description">Attacking types run down the left. Defending types run across the top.</p>
               </div>
 
               <div class="view-tabs" role="tablist" aria-label="Challenge view">
@@ -112,18 +135,29 @@
                 <div class="control-row">
                   <div class="mode-control">
                     <span class="control-label">Feedback mode</span>
-                    <div class="segmented" aria-label="Feedback mode">
-                      <button class="segment is-active" type="button" data-mode="practice">
-                        Practice
-                      </button>
-                      <button class="segment" type="button" data-mode="test">Test</button>
-                    </div>
-                    <span class="mode-description" id="mode-description">See feedback as you answer.</span>
+                    <button
+                      class="feedback-switch is-instant"
+                      id="feedback-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked="true"
+                      aria-describedby="mode-description"
+                    >
+                      <span class="switch-track" aria-hidden="true"><span></span></span>
+                      <span class="switch-copy">
+                        <strong id="feedback-title">Instant feedback</strong>
+                        <span class="mode-description" id="mode-description">Correct each cell as you go.</span>
+                      </span>
+                    </button>
                   </div>
 
                   <div class="chart-actions">
+                    <button class="button button-quiet axis-button" id="axis-toggle" type="button">
+                      <span class="swap-icon" aria-hidden="true">⇄</span>
+                      <span><strong>Swap axes</strong><small id="axis-status">Attack ↓ · Defend →</small></span>
+                    </button>
                     <button class="button button-accent" id="check-answers" type="button" hidden>
-                      <span aria-hidden="true">✓</span> Check answers
+                      <span aria-hidden="true">✓</span> Check table
                     </button>
                     <button class="button button-quiet" id="reveal-chart" type="button">
                       <span class="eye-icon" aria-hidden="true"></span> Reveal chart
@@ -169,7 +203,7 @@
                 </div>
                 <div class="stat-divider"></div>
                 <div class="stat-block">
-                  <span>ROWS CONFIRMED</span>
+                  <span id="rows-stat-label">ATTACK ROWS CONFIRMED</span>
                   <strong id="rows-stat">0 <small>/ 18</small></strong>
                 </div>
                 <div class="overall-progress">
@@ -192,15 +226,15 @@
                     </caption>
                   </table>
                 </div>
-                <div class="scroll-note" aria-hidden="true"><span>←</span> Scroll to see every defending type <span>→</span></div>
+                <div class="scroll-note" id="scroll-note" aria-hidden="true"><span>←</span> Scroll to see every defending type <span>→</span></div>
               </div>
 
               <div class="mobile-chart" id="mobile-chart-wrap">
-                <label class="attacker-picker" for="mobile-attacker">
-                  <span>Attacking type</span>
+                <label class="attacker-picker" for="mobile-row-type">
+                  <span id="mobile-axis-label">Attacking type</span>
                   <span class="select-wrap">
                     <img class="picker-icon" id="picker-icon" src="/assets/type-icons/normal.svg" alt="" />
-                    <select id="mobile-attacker"></select>
+                    <select id="mobile-row-type"></select>
                   </span>
                 </label>
                 <div class="mobile-row-progress">
@@ -260,20 +294,20 @@
         <section class="how-it-works container" aria-labelledby="how-title">
           <div class="how-heading">
             <p class="section-kicker">READING THE CHART</p>
-            <h2 id="how-title">Attack down. Defend across.</h2>
+            <h2 id="how-title">Follow the labels. Swap anytime.</h2>
           </div>
           <div class="rule-cards">
             <article>
               <span class="rule-number">01</span>
               <div class="rule-icon attack-rule" aria-hidden="true">↓</div>
-              <h3>Pick the attacker</h3>
-              <p>Start with a row on the left. This is the type of the move being used.</p>
+              <h3>Find the attacker</h3>
+              <p>Use the axis labeled ATTACK. This is the type of the move being used.</p>
             </article>
             <article>
               <span class="rule-number">02</span>
               <div class="rule-icon defend-rule" aria-hidden="true">→</div>
               <h3>Find the defender</h3>
-              <p>Follow the column from the top. This is the single type taking the hit.</p>
+              <p>Use the axis labeled DEFEND. This is the single type taking the hit.</p>
             </article>
             <article>
               <span class="rule-number">03</span>
