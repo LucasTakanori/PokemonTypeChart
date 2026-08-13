@@ -18,11 +18,11 @@
     </script>
     <meta
       name="description"
-      content="Practice all 324 modern Pokémon type matchups with an interactive chart and quick quiz."
+      content="Practice modern Pokémon type matchups, analyze one- or two-type coverage, and sharpen recall with a quick quiz."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260813-cache-fix" />
+    <link rel="stylesheet" href="/styles.css?v=20260813-coverage" />
     <title>Typewise — Pokémon Type Matchup Challenge</title>
   </head>
   <body>
@@ -114,6 +114,18 @@
                 >
                   <span class="grid-icon" aria-hidden="true"></span>
                   Full chart
+                </button>
+                <button
+                  class="view-tab"
+                  id="coverage-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="coverage-panel"
+                  data-view="coverage"
+                >
+                  <span class="coverage-icon" aria-hidden="true">◒</span>
+                  Coverage
                 </button>
                 <button
                   class="view-tab"
@@ -247,6 +259,37 @@
               <div class="results-panel" id="results-panel" hidden></div>
             </div>
 
+            <div id="coverage-panel" role="tabpanel" aria-labelledby="coverage-tab" hidden>
+              <div class="coverage-picker-card">
+                <div class="coverage-picker-copy">
+                  <p class="section-kicker">TEAM SLOT</p>
+                  <h3>Choose one or two types</h3>
+                  <p>See the best attacking option and the full defensive profile for this typing.</p>
+                </div>
+
+                <fieldset class="coverage-selectors">
+                  <legend class="sr-only">Coverage types</legend>
+                  <label for="coverage-primary">
+                    <span>Primary type</span>
+                    <span class="coverage-select-wrap">
+                      <img id="coverage-primary-icon" src="/assets/type-icons/fire.svg" alt="" />
+                      <select id="coverage-primary"></select>
+                    </span>
+                  </label>
+                  <span class="coverage-plus" aria-hidden="true">+</span>
+                  <label for="coverage-secondary">
+                    <span>Secondary type</span>
+                    <span class="coverage-select-wrap">
+                      <img id="coverage-secondary-icon" src="/assets/type-icons/flying.svg" alt="" />
+                      <select id="coverage-secondary"></select>
+                    </span>
+                  </label>
+                </fieldset>
+              </div>
+
+              <div class="coverage-results" id="coverage-results"></div>
+            </div>
+
             <div id="quick-panel" role="tabpanel" aria-labelledby="quick-tab" hidden>
               <div class="quick-layout">
                 <div class="quick-card">
@@ -345,6 +388,6 @@
 
     <div class="sr-only" id="live-region" aria-live="polite" aria-atomic="true"></div>
     <noscript>This interactive challenge needs JavaScript enabled.</noscript>
-    <script type="module" src="/app.js?v=20260813-cache-fix"></script>
+    <script type="module" src="/app.js?v=20260813-coverage"></script>
   </body>
 </html>

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { TYPE_CHART, TYPE_IDS, effectiveness } from '../chart-data.js';
+import {
+  TYPE_CHART,
+  TYPE_IDS,
+  defensiveCoverage,
+  effectiveness,
+  offensiveCoverage,
+} from '../chart-data.js';
 
 test('contains all 324 modern single-type matchups', () => {
   assert.equal(TYPE_IDS.length, 18);
@@ -49,4 +55,44 @@ test('handles directional and modern-era edge cases', () => {
   assert.equal(effectiveness('ghost', 'steel'), 1);
   assert.equal(effectiveness('dark', 'steel'), 1);
   assert.equal(effectiveness('poison', 'bug'), 1);
+});
+
+test('uses the stronger selected attack for offensive coverage', () => {
+  const coverage = offensiveCoverage(['fire', 'flying']);
+  assert.equal(coverage.grass, 2);
+  assert.equal(coverage.fighting, 2);
+  assert.equal(coverage.steel, 2);
+  assert.equal(coverage.rock, 0.5);
+  assert.equal(coverage.water, 1);
+});
+
+test('multiplies both selected types for defensive coverage', () => {
+  const coverage = defensiveCoverage(['fire', 'flying']);
+  assert.equal(coverage.rock, 4);
+  assert.equal(coverage.water, 2);
+  assert.equal(coverage.electric, 2);
+  assert.equal(coverage.fighting, 0.5);
+  assert.equal(coverage.grass, 0.25);
+  assert.equal(coverage.ground, 0);
+});
+
+test('duplicate selections behave like a single type', () => {
+  assert.equal(offensiveCoverage(['fire', 'fire']).grass, 2);
+  assert.equal(defensiveCoverage(['fire', 'fire']).water, 2);
+});
+
+test('coverage is order invariant and always returns all 18 types', () => {
+  assert.deepEqual(offensiveCoverage(['electric', 'ground']), offensiveCoverage(['ground', 'electric']));
+  assert.deepEqual(defensiveCoverage(['ground', 'flying']), defensiveCoverage(['flying', 'ground']));
+  assert.equal(Object.keys(offensiveCoverage(['fire'])).length, 18);
+  assert.equal(Object.keys(defensiveCoverage(['fire'])).length, 18);
+});
+
+test('coverage handles immunities, cancellation, and alternative moves', () => {
+  const groundFlying = defensiveCoverage(['ground', 'flying']);
+  assert.equal(groundFlying.electric, 0);
+  assert.equal(groundFlying.ice, 4);
+  assert.equal(groundFlying.rock, 1);
+  assert.equal(offensiveCoverage(['normal', 'fighting']).ghost, 0);
+  assert.equal(offensiveCoverage(['electric', 'fire']).ground, 1);
 });

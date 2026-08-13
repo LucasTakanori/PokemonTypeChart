@@ -7,6 +7,7 @@ Live site: [pokemon-type-chart-delta.vercel.app](https://pokemon-type-chart-delt
 ## Features
 
 - Full 18 × 18 chart with all 324 single-type matchups
+- One- or two-type coverage analysis showing the best offensive option and the combined defensive profile
 - `×0`, `×½`, `×1`, and `×2` answer palette
 - Unmarked cells default to `×1`, matching the usual compact type-chart convention
 - One-button feedback toggle between instant correction and whole-table scoring

@@ -1,4 +1,12 @@
-import { TYPE_CHART, TYPE_IDS, TYPES, effectiveness, typeById } from './chart-data.js';
+import {
+  TYPE_CHART,
+  TYPE_IDS,
+  TYPES,
+  defensiveCoverage,
+  effectiveness,
+  offensiveCoverage,
+  typeById,
+} from './chart-data.js?v=20260813-coverage';
 
 const STORAGE_KEY = 'typewise-progress-v1';
 const LEGACY_BACKUP_KEY = 'typewise-progress-v1-legacy-sessions';
@@ -17,6 +25,31 @@ const VALUE_PHRASES = new Map([
   [1, 'deals neutral damage to'],
   [2, 'is super effective against'],
 ]);
+
+const COVERAGE_LABELS = new Map([
+  [0, '×0'],
+  [0.25, '×¼'],
+  [0.5, '×½'],
+  [1, '×1'],
+  [2, '×2'],
+  [4, '×4'],
+]);
+
+const OFFENSIVE_GROUPS = [
+  { value: 2, title: 'Super effective' },
+  { value: 1, title: 'Neutral option' },
+  { value: 0.5, title: 'Best option resisted' },
+  { value: 0, title: 'No effective option' },
+];
+
+const DEFENSIVE_GROUPS = [
+  { value: 4, title: 'Double weakness' },
+  { value: 2, title: 'Weakness' },
+  { value: 1, title: 'Neutral damage' },
+  { value: 0.5, title: 'Resistance' },
+  { value: 0.25, title: 'Double resistance' },
+  { value: 0, title: 'Immunity' },
+];
 
 const QUIZ_POOL = Object.fromEntries(
   VALID_VALUES.map((value) => [
@@ -48,6 +81,10 @@ const defaultState = () => ({
     defense: 'normal',
   },
   chart: defaultSession(),
+  coverage: {
+    primary: 'fire',
+    secondary: 'flying',
+  },
   quick: {
     question: null,
     answer: null,
@@ -60,6 +97,7 @@ const defaultState = () => ({
 
 const elements = {
   chartPanel: document.querySelector('#chart-panel'),
+  coveragePanel: document.querySelector('#coverage-panel'),
   quickPanel: document.querySelector('#quick-panel'),
   viewTabs: [...document.querySelectorAll('.view-tab')],
   themeToggle: document.querySelector('#theme-toggle'),
@@ -90,6 +128,11 @@ const elements = {
   progressFill: document.querySelector('#progress-fill'),
   prompt: document.querySelector('#matchup-prompt'),
   results: document.querySelector('#results-panel'),
+  coveragePrimary: document.querySelector('#coverage-primary'),
+  coverageSecondary: document.querySelector('#coverage-secondary'),
+  coveragePrimaryIcon: document.querySelector('#coverage-primary-icon'),
+  coverageSecondaryIcon: document.querySelector('#coverage-secondary-icon'),
+  coverageResults: document.querySelector('#coverage-results'),
   quickMatchup: document.querySelector('#quick-matchup'),
   quickOptions: document.querySelector('#quick-options'),
   quickFeedback: document.querySelector('#quick-feedback'),
@@ -202,6 +245,14 @@ function sanitizeQuick(rawQuick) {
   };
 }
 
+function sanitizeCoverage(rawCoverage) {
+  const primary = isType(rawCoverage?.primary) ? rawCoverage.primary : 'fire';
+  const secondary = rawCoverage?.secondary === null || isType(rawCoverage?.secondary)
+    ? rawCoverage.secondary
+    : 'flying';
+  return { primary, secondary: secondary === primary ? null : secondary };
+}
+
 function loadState() {
   const fallback = defaultState();
   try {
@@ -213,7 +264,7 @@ function loadState() {
       localStorage.setItem(LEGACY_BACKUP_KEY, JSON.stringify(raw.sessions));
     }
     return {
-      view: ['chart', 'quick'].includes(raw.view) ? raw.view : fallback.view,
+      view: ['chart', 'coverage', 'quick'].includes(raw.view) ? raw.view : fallback.view,
       mode,
       theme: ['light', 'dark'].includes(raw.theme) ? raw.theme : fallback.theme,
       axis: ['attack-rows', 'defense-rows'].includes(raw.axis) ? raw.axis : fallback.axis,
@@ -225,6 +276,7 @@ function loadState() {
         defense: isType(raw.mobileRows?.defense) ? raw.mobileRows.defense : fallback.mobileRows.defense,
       },
       chart: raw.chart ? sanitizeSession(raw.chart) : migrateLegacySessions(raw.sessions, mode),
+      coverage: sanitizeCoverage(raw.coverage),
       quick: sanitizeQuick(raw.quick),
     };
   } catch {
@@ -345,6 +397,97 @@ function renderMobileRow() {
   }).join('');
 }
 
+function selectedCoverageTypes() {
+  return [...new Set([state.coverage.primary, state.coverage.secondary].filter(Boolean))];
+}
+
+function coverageTypeChip(type) {
+  return `
+    <li class="coverage-type-chip" style="${typeStyle(type)}">
+      ${typeIconMarkup(type)}
+      <span>${type.name}</span>
+    </li>
+  `;
+}
+
+function coverageGroupMarkup(profile, { value, title }) {
+  const matchingTypes = TYPES.filter((type) => profile[type.id] === value);
+  const valueClass = String(value).replace('.', '-');
+  return `
+    <section class="coverage-group coverage-value-${valueClass}" aria-labelledby="coverage-${valueClass}-${title.replaceAll(' ', '-').toLowerCase()}">
+      <div class="coverage-group-heading">
+        <strong>${COVERAGE_LABELS.get(value)}</strong>
+        <h4 id="coverage-${valueClass}-${title.replaceAll(' ', '-').toLowerCase()}">${title}</h4>
+        <small>${matchingTypes.length} ${matchingTypes.length === 1 ? 'type' : 'types'}</small>
+      </div>
+      ${matchingTypes.length
+        ? `<ul class="coverage-type-list">${matchingTypes.map(coverageTypeChip).join('')}</ul>`
+        : '<p class="coverage-empty">None</p>'}
+    </section>
+  `;
+}
+
+function renderCoverageSelectors() {
+  if (!elements.coveragePrimary.options.length) {
+    elements.coveragePrimary.innerHTML = TYPES.map(
+      (type) => `<option value="${type.id}">${type.name}</option>`,
+    ).join('');
+    elements.coverageSecondary.innerHTML = `
+      <option value="">None — single type</option>
+      ${TYPES.map((type) => `<option value="${type.id}">${type.name}</option>`).join('')}
+    `;
+  }
+
+  elements.coveragePrimary.value = state.coverage.primary;
+  elements.coverageSecondary.value = state.coverage.secondary ?? '';
+  [...elements.coverageSecondary.options].forEach((option) => {
+    option.disabled = option.value === state.coverage.primary;
+  });
+  elements.coveragePrimaryIcon.src = typeById(state.coverage.primary).icon;
+  const secondaryType = state.coverage.secondary ? typeById(state.coverage.secondary) : null;
+  elements.coverageSecondaryIcon.hidden = !secondaryType;
+  if (secondaryType) elements.coverageSecondaryIcon.src = secondaryType.icon;
+}
+
+function renderCoverage() {
+  renderCoverageSelectors();
+  const selectedTypes = selectedCoverageTypes();
+  const typeNames = selectedTypes.map((type) => typeById(type).name);
+  const offense = offensiveCoverage(selectedTypes);
+  const defense = defensiveCoverage(selectedTypes);
+  const typingLabel = typeNames.join(' / ');
+
+  elements.coverageResults.innerHTML = `
+    <article class="coverage-card" aria-labelledby="offensive-coverage-title">
+      <header class="coverage-card-heading">
+        <span class="coverage-direction is-offense" aria-hidden="true">→</span>
+        <div>
+          <p class="section-kicker">OFFENSIVE COVERAGE</p>
+          <h3 id="offensive-coverage-title">Best attacking option</h3>
+          <p>Uses whichever selected attack type has the stronger matchup against each single type. STAB is not included.</p>
+        </div>
+      </header>
+      <div class="coverage-groups">
+        ${OFFENSIVE_GROUPS.map((group) => coverageGroupMarkup(offense, group)).join('')}
+      </div>
+    </article>
+
+    <article class="coverage-card" aria-labelledby="defensive-coverage-title">
+      <header class="coverage-card-heading">
+        <span class="coverage-direction is-defense" aria-hidden="true">←</span>
+        <div>
+          <p class="section-kicker">DEFENSIVE PROFILE</p>
+          <h3 id="defensive-coverage-title">Damage received by ${typingLabel}</h3>
+          <p>${typeNames.length === 1 ? 'Shows this type’s' : 'Multiplies both types’'} matchup against every incoming attack type.</p>
+        </div>
+      </header>
+      <div class="coverage-groups">
+        ${DEFENSIVE_GROUPS.map((group) => coverageGroupMarkup(defense, group)).join('')}
+      </div>
+    </article>
+  `;
+}
+
 function selectMultiplier(value, shouldAnnounce = true) {
   state.selected = Number(value);
   elements.palette.forEach((button) => {
@@ -359,20 +502,35 @@ function selectMultiplier(value, shouldAnnounce = true) {
 
 function setView(view, { focusPanel = false } = {}) {
   state.view = view;
-  const isChart = view === 'chart';
-  elements.chartPanel.hidden = !isChart;
-  elements.quickPanel.hidden = isChart;
+  const panels = {
+    chart: elements.chartPanel,
+    coverage: elements.coveragePanel,
+    quick: elements.quickPanel,
+  };
+  Object.entries(panels).forEach(([panelView, panel]) => {
+    panel.hidden = panelView !== view;
+  });
   elements.viewTabs.forEach((tab) => {
     const active = tab.dataset.view === view;
     tab.classList.toggle('is-active', active);
     tab.setAttribute('aria-selected', String(active));
     tab.tabIndex = active ? 0 : -1;
   });
+  if (view === 'chart') {
+    elements.axisDescription.textContent = rowsAreAttackers()
+      ? 'Attacking types run down the left. Defending types run across the top.'
+      : 'Defending types run down the left. Attacking types run across the top.';
+  } else if (view === 'coverage') {
+    elements.axisDescription.textContent = 'Combine one or two types to inspect offensive coverage and defensive matchups.';
+  } else {
+    elements.axisDescription.textContent = 'Build fast recall with one random attacking and defending matchup at a time.';
+  }
   saveState();
 
-  if (!isChart) renderQuick();
+  if (view === 'coverage') renderCoverage();
+  if (view === 'quick') renderQuick();
   if (focusPanel) {
-    const target = isChart ? elements.chartPanel : elements.quickPanel;
+    const target = panels[view];
     target.setAttribute('tabindex', '-1');
     target.focus({ preventScroll: true });
   }
@@ -904,14 +1062,22 @@ function performReset() {
 
 function bindEvents() {
   elements.viewTabs.forEach((tab) => {
-    tab.addEventListener('click', () => setView(tab.dataset.view, { focusPanel: true }));
+    tab.addEventListener('click', () => setView(tab.dataset.view));
     tab.addEventListener('keydown', (event) => {
-      if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
-      const next = tab.dataset.view === 'chart' ? 'quick' : 'chart';
-      const nextTab = elements.viewTabs.find((candidate) => candidate.dataset.view === next);
+      const currentIndex = elements.viewTabs.indexOf(tab);
+      let nextIndex = currentIndex;
+      if (event.key === 'Home') nextIndex = 0;
+      else if (event.key === 'End') nextIndex = elements.viewTabs.length - 1;
+      else if (event.key === 'ArrowLeft') {
+        nextIndex = (currentIndex - 1 + elements.viewTabs.length) % elements.viewTabs.length;
+      } else {
+        nextIndex = (currentIndex + 1) % elements.viewTabs.length;
+      }
+      const nextTab = elements.viewTabs[nextIndex];
       nextTab.focus();
-      setView(next);
+      setView(nextTab.dataset.view);
     });
   });
 
@@ -925,6 +1091,23 @@ function bindEvents() {
 
   elements.axisToggle.addEventListener('click', () => {
     setAxis(rowsAreAttackers() ? 'defense-rows' : 'attack-rows');
+  });
+
+  elements.coveragePrimary.addEventListener('change', () => {
+    const oldPrimary = state.coverage.primary;
+    const nextPrimary = elements.coveragePrimary.value;
+    if (state.coverage.secondary === nextPrimary) state.coverage.secondary = oldPrimary;
+    state.coverage.primary = nextPrimary;
+    saveState();
+    renderCoverage();
+    announce(`Coverage updated for ${selectedCoverageTypes().map((type) => typeById(type).name).join(' and ')}.`);
+  });
+
+  elements.coverageSecondary.addEventListener('change', () => {
+    state.coverage.secondary = elements.coverageSecondary.value || null;
+    saveState();
+    renderCoverage();
+    announce(`Coverage updated for ${selectedCoverageTypes().map((type) => typeById(type).name).join(' and ')}.`);
   });
 
   elements.palette.forEach((button) => {
@@ -1075,6 +1258,7 @@ function bindEvents() {
 function initialize() {
   renderDesktopChart();
   renderMobileSelector();
+  renderCoverageSelectors();
   bindEvents();
   setTheme(state.theme, { shouldSave: false });
   setAxis(state.axis, { shouldAnnounce: false, shouldSave: false });

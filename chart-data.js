@@ -58,6 +58,37 @@ export function effectiveness(attack, defense) {
   return 1;
 }
 
+function uniqueKnownTypes(typeIds) {
+  const unique = [...new Set(typeIds)];
+  if (!unique.length || unique.some((type) => !TYPE_IDS.includes(type))) {
+    throw new RangeError(`Unknown or empty Pokémon type selection: ${typeIds.join(', ')}`);
+  }
+  return unique;
+}
+
+export function offensiveCoverage(typeIds) {
+  const attackingTypes = uniqueKnownTypes(typeIds);
+  return Object.fromEntries(
+    TYPE_IDS.map((defense) => [
+      defense,
+      Math.max(...attackingTypes.map((attack) => effectiveness(attack, defense))),
+    ]),
+  );
+}
+
+export function defensiveCoverage(typeIds) {
+  const defendingTypes = uniqueKnownTypes(typeIds);
+  return Object.fromEntries(
+    TYPE_IDS.map((attack) => [
+      attack,
+      defendingTypes.reduce(
+        (multiplier, defense) => multiplier * effectiveness(attack, defense),
+        1,
+      ),
+    ]),
+  );
+}
+
 export const TYPE_CHART = Object.fromEntries(
   TYPE_IDS.map((attack) => [
     attack,
