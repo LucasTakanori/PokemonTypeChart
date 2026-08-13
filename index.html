@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6f1e7" />
+    <meta
+      name="description"
+      content="Practice all 324 modern Pokémon type matchups with an interactive chart and quick quiz."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <title>Typewise — Pokémon Type Matchup Challenge</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Skip to the challenge</a>
+
+    <div class="page-shell" id="top">
+      <header class="site-header container" aria-label="Site header">
+        <a class="brand" href="#top" aria-label="Typewise home">
+          <span class="brand-mark" aria-hidden="true"><span></span></span>
+          <span>TYPEWISE</span>
+        </a>
+        <div class="header-meta">
+          <span class="ruleset-pill"><span class="status-dot"></span> Modern chart</span>
+          <span class="save-status" id="save-status" aria-live="polite">Saved locally</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero container" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow"><span></span> Matchup memory lab</p>
+            <h1 id="hero-title">Know your type.<br /><em>Own the matchup.</em></h1>
+            <p class="hero-description">
+              Train every attacking and defending type combination. Fill the complete chart,
+              get instant feedback, or sharpen your recall one matchup at a time.
+            </p>
+            <a class="primary-link" href="#workspace">
+              Start practicing
+              <span aria-hidden="true">↓</span>
+            </a>
+          </div>
+
+          <div class="hero-visual" aria-label="Example: Normal attacking Normal has one times effectiveness">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <div class="example-card">
+              <p class="example-kicker">MATCHUP EXAMPLE</p>
+              <div class="example-types">
+                <div>
+                  <span class="mini-label">ATTACK</span>
+                  <span class="type-pill type-normal"><img class="type-icon" src="/assets/type-icons/normal.svg" alt="" /> Normal</span>
+                </div>
+                <span class="example-arrow" aria-hidden="true">→</span>
+                <div>
+                  <span class="mini-label">DEFEND</span>
+                  <span class="type-pill type-normal"><img class="type-icon" src="/assets/type-icons/normal.svg" alt="" /> Normal</span>
+                </div>
+              </div>
+              <div class="example-answer">
+                <span>Effectiveness</span>
+                <strong>×1</strong>
+              </div>
+            </div>
+            <span class="floating-tag tag-super">×2</span>
+            <span class="floating-tag tag-half">×½</span>
+            <span class="floating-tag tag-zero">×0</span>
+          </div>
+        </section>
+
+        <section class="workspace-wrap" id="workspace" aria-labelledby="workspace-title">
+          <div class="container workspace-container">
+            <div class="workspace-heading">
+              <div>
+                <p class="section-kicker">THE TRAINING GROUND</p>
+                <h2 id="workspace-title">Type Matchup Challenge</h2>
+                <p>Attacking types run down the left. Defending types run across the top.</p>
+              </div>
+
+              <div class="view-tabs" role="tablist" aria-label="Challenge view">
+                <button
+                  class="view-tab is-active"
+                  id="chart-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="chart-panel"
+                  data-view="chart"
+                >
+                  <span class="grid-icon" aria-hidden="true"></span>
+                  Full chart
+                </button>
+                <button
+                  class="view-tab"
+                  id="quick-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="quick-panel"
+                  data-view="quick"
+                >
+                  <span class="bolt-icon" aria-hidden="true">ϟ</span>
+                  Quick quiz
+                </button>
+              </div>
+            </div>
+
+            <div id="chart-panel" role="tabpanel" aria-labelledby="chart-tab">
+              <div class="control-deck">
+                <div class="control-row">
+                  <div class="mode-control">
+                    <span class="control-label">Feedback mode</span>
+                    <div class="segmented" aria-label="Feedback mode">
+                      <button class="segment is-active" type="button" data-mode="practice">
+                        Practice
+                      </button>
+                      <button class="segment" type="button" data-mode="test">Test</button>
+                    </div>
+                    <span class="mode-description" id="mode-description">See feedback as you answer.</span>
+                  </div>
+
+                  <div class="chart-actions">
+                    <button class="button button-accent" id="check-answers" type="button" hidden>
+                      <span aria-hidden="true">✓</span> Check answers
+                    </button>
+                    <button class="button button-quiet" id="reveal-chart" type="button">
+                      <span class="eye-icon" aria-hidden="true"></span> Reveal chart
+                    </button>
+                    <button class="icon-button" id="reset-chart" type="button" aria-label="Reset this chart" title="Reset chart">
+                      <span aria-hidden="true">↻</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              <div class="answer-dock" aria-labelledby="answer-label">
+                  <div class="answer-copy">
+                    <span class="control-label" id="answer-label">Your answer</span>
+                    <span>Pick a multiplier, then mark cells. Unmarked = ×1</span>
+                  </div>
+                  <div class="answer-palette" role="radiogroup" aria-label="Damage multiplier">
+                    <button class="answer-choice" type="button" role="radio" aria-checked="false" data-value="0">
+                      <strong>×0</strong><span>No effect</span><kbd>0</kbd>
+                    </button>
+                    <button class="answer-choice" type="button" role="radio" aria-checked="false" data-value="0.5">
+                      <strong>×½</strong><span>Not very</span><kbd>H</kbd>
+                    </button>
+                    <button class="answer-choice is-active" type="button" role="radio" aria-checked="true" data-value="1">
+                      <strong>×1</strong><span>Neutral</span><kbd>1</kbd>
+                    </button>
+                    <button class="answer-choice" type="button" role="radio" aria-checked="false" data-value="2">
+                      <strong>×2</strong><span>Super</span><kbd>2</kbd>
+                    </button>
+                  </div>
+              </div>
+
+              <div class="progress-overview" aria-label="Chart progress">
+                <div class="stat-block">
+                  <span>MARKED</span>
+                  <strong id="answered-stat">0 <small>/ 324</small></strong>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-block">
+                  <span>ACCURACY</span>
+                  <strong id="accuracy-stat">—</strong>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-block">
+                  <span>ROWS CONFIRMED</span>
+                  <strong id="rows-stat">0 <small>/ 18</small></strong>
+                </div>
+                <div class="overall-progress">
+                  <div class="progress-copy"><span>Overall progress</span><strong id="progress-percent">0%</strong></div>
+                  <div class="progress-track" aria-hidden="true"><span id="progress-fill"></span></div>
+                </div>
+              </div>
+
+              <div class="matchup-prompt" id="matchup-prompt">
+                <span class="prompt-symbol" aria-hidden="true">↙</span>
+                <p><strong>Choose a multiplier</strong><span>Unmarked cells use the default ×1.</span></p>
+                <span class="keyboard-hint">Arrow keys move · 0 / H / 1 / 2 answer · Delete clears</span>
+              </div>
+
+              <div class="chart-card desktop-chart" id="desktop-chart-wrap">
+                <div class="chart-scroll" tabindex="0" aria-label="Scrollable type chart">
+                  <table class="type-chart" id="type-chart">
+                    <caption class="sr-only">
+                      Interactive Pokémon effectiveness chart. Rows are attacking types and columns are defending types.
+                    </caption>
+                  </table>
+                </div>
+                <div class="scroll-note" aria-hidden="true"><span>←</span> Scroll to see every defending type <span>→</span></div>
+              </div>
+
+              <div class="mobile-chart" id="mobile-chart-wrap">
+                <label class="attacker-picker" for="mobile-attacker">
+                  <span>Attacking type</span>
+                  <span class="select-wrap">
+                    <img class="picker-icon" id="picker-icon" src="/assets/type-icons/normal.svg" alt="" />
+                    <select id="mobile-attacker"></select>
+                  </span>
+                </label>
+                <div class="mobile-row-progress">
+                  <span id="mobile-row-label">Normal row</span>
+                  <strong id="mobile-row-count">0 / 18</strong>
+                </div>
+                <div class="defender-grid" id="mobile-defender-grid"></div>
+              </div>
+
+              <div class="results-panel" id="results-panel" hidden></div>
+            </div>
+
+            <div id="quick-panel" role="tabpanel" aria-labelledby="quick-tab" hidden>
+              <div class="quick-layout">
+                <div class="quick-card">
+                  <div class="quick-card-top">
+                    <div>
+                      <p class="section-kicker">RAPID RECALL</p>
+                      <h3>What happens when…</h3>
+                    </div>
+                    <button class="button button-quiet" id="skip-question" type="button">Shuffle <span aria-hidden="true">↻</span></button>
+                  </div>
+
+                  <div class="quick-matchup" id="quick-matchup"></div>
+
+                  <p class="quick-question">Choose the damage multiplier</p>
+                  <div class="quick-options" id="quick-options">
+                    <button type="button" data-quick-value="0"><strong>×0</strong><span>No effect</span></button>
+                    <button type="button" data-quick-value="0.5"><strong>×½</strong><span>Not very effective</span></button>
+                    <button type="button" data-quick-value="1"><strong>×1</strong><span>Neutral damage</span></button>
+                    <button type="button" data-quick-value="2"><strong>×2</strong><span>Super effective</span></button>
+                  </div>
+
+                  <div class="quick-feedback" id="quick-feedback" hidden></div>
+                </div>
+
+                <aside class="quick-score" aria-label="Quick quiz score">
+                  <p class="section-kicker">THIS RUN</p>
+                  <div class="score-ring" id="score-ring">
+                    <strong id="quick-score-percent">—</strong>
+                    <span>accuracy</span>
+                  </div>
+                  <dl>
+                    <div><dt>Correct</dt><dd id="quick-correct">0</dd></div>
+                    <div><dt>Questions</dt><dd id="quick-total">0</dd></div>
+                    <div><dt>Current streak</dt><dd id="quick-streak">0</dd></div>
+                    <div><dt>Best streak</dt><dd id="quick-best">0</dd></div>
+                  </dl>
+                  <button class="button button-quiet full-width" id="reset-quick" type="button">Reset run</button>
+                  <p class="score-note">Your run is saved on this device.</p>
+                </aside>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="how-it-works container" aria-labelledby="how-title">
+          <div class="how-heading">
+            <p class="section-kicker">READING THE CHART</p>
+            <h2 id="how-title">Attack down. Defend across.</h2>
+          </div>
+          <div class="rule-cards">
+            <article>
+              <span class="rule-number">01</span>
+              <div class="rule-icon attack-rule" aria-hidden="true">↓</div>
+              <h3>Pick the attacker</h3>
+              <p>Start with a row on the left. This is the type of the move being used.</p>
+            </article>
+            <article>
+              <span class="rule-number">02</span>
+              <div class="rule-icon defend-rule" aria-hidden="true">→</div>
+              <h3>Find the defender</h3>
+              <p>Follow the column from the top. This is the single type taking the hit.</p>
+            </article>
+            <article>
+              <span class="rule-number">03</span>
+              <div class="rule-icon answer-rule" aria-hidden="true">×2</div>
+              <h3>Call the multiplier</h3>
+              <p>Choose ×0, ×½, ×1, or ×2. Dual-type multipliers can be practiced by combining both.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div class="container">
+          <a class="brand footer-brand" href="#top">
+            <span class="brand-mark" aria-hidden="true"><span></span></span>
+            <span>TYPEWISE</span>
+          </a>
+          <p>Modern type chart · Generation VI onward · 18 types · 324 matchups</p>
+          <p class="legal">An unofficial fan-made learning tool. Pokémon and related names belong to their respective owners.</p>
+        </div>
+      </footer>
+    </div>
+
+    <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="dialog-title">
+      <form method="dialog">
+        <div class="dialog-symbol" aria-hidden="true">↻</div>
+        <h2 id="dialog-title">Reset your progress?</h2>
+        <p id="dialog-copy">This clears every answer in the current chart. It cannot be undone.</p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" value="cancel">Keep progress</button>
+          <button class="button button-danger" id="confirm-reset" value="confirm">Reset chart</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="sr-only" id="live-region" aria-live="polite" aria-atomic="true"></div>
+    <noscript>This interactive challenge needs JavaScript enabled.</noscript>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

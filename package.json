@@ -1,0 +1,14 @@
+{
+  "name": "pokemon-type-chart-quiz",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An interactive modern Pokémon type-effectiveness memory quiz.",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check app.js && node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
