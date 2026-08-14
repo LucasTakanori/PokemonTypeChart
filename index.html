@@ -22,7 +22,7 @@
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260813-coverage" />
+    <link rel="stylesheet" href="/styles.css?v=20260813-coverage-v2" />
     <title>Typewise — Pokémon Type Matchup Challenge</title>
   </head>
   <body>
@@ -57,13 +57,19 @@
             <p class="eyebrow"><span></span> Matchup memory lab</p>
             <h1 id="hero-title">Know your type.<br /><em>Own the matchup.</em></h1>
             <p class="hero-description">
-              Train every attacking and defending type combination. Fill the complete chart,
-              get instant feedback, or sharpen your recall one matchup at a time.
+              Analyze offensive and defensive coverage for one or two types, fill the complete
+              chart, or sharpen your recall one matchup at a time.
             </p>
-            <a class="primary-link" href="#workspace">
-              Start practicing
-              <span aria-hidden="true">↓</span>
-            </a>
+            <div class="hero-actions" aria-label="Choose a training tool">
+              <a class="primary-link" href="/?view=coverage#workspace" data-view-target="coverage">
+                Analyze coverage
+                <span aria-hidden="true">→</span>
+              </a>
+              <a class="secondary-link" href="/?view=chart#workspace" data-view-target="chart">
+                Practice full chart
+                <span aria-hidden="true">↓</span>
+              </a>
+            </div>
           </div>
 
           <div class="hero-visual" aria-label="Example: Normal attacking Normal has one times effectiveness">
@@ -388,6 +394,6 @@
 
     <div class="sr-only" id="live-region" aria-live="polite" aria-atomic="true"></div>
     <noscript>This interactive challenge needs JavaScript enabled.</noscript>
-    <script type="module" src="/app.js?v=20260813-coverage"></script>
+    <script type="module" src="/app.js?v=20260813-coverage-v2"></script>
   </body>
 </html>

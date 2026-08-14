@@ -6,7 +6,7 @@ import {
   effectiveness,
   offensiveCoverage,
   typeById,
-} from './chart-data.js?v=20260813-coverage';
+} from './chart-data.js?v=20260813-coverage-v2';
 
 const STORAGE_KEY = 'typewise-progress-v1';
 const LEGACY_BACKUP_KEY = 'typewise-progress-v1-legacy-sessions';
@@ -100,6 +100,7 @@ const elements = {
   coveragePanel: document.querySelector('#coverage-panel'),
   quickPanel: document.querySelector('#quick-panel'),
   viewTabs: [...document.querySelectorAll('.view-tab')],
+  viewLinks: [...document.querySelectorAll('[data-view-target]')],
   themeToggle: document.querySelector('#theme-toggle'),
   themeToggleLabel: document.querySelector('#theme-toggle-label'),
   feedbackToggle: document.querySelector('#feedback-toggle'),
@@ -1061,6 +1062,10 @@ function performReset() {
 }
 
 function bindEvents() {
+  elements.viewLinks.forEach((link) => {
+    link.addEventListener('click', () => setView(link.dataset.viewTarget));
+  });
+
   elements.viewTabs.forEach((tab) => {
     tab.addEventListener('click', () => setView(tab.dataset.view));
     tab.addEventListener('keydown', (event) => {
@@ -1256,6 +1261,8 @@ function bindEvents() {
 }
 
 function initialize() {
+  const requestedView = new URLSearchParams(window.location.search).get('view');
+  if (['chart', 'coverage', 'quick'].includes(requestedView)) state.view = requestedView;
   renderDesktopChart();
   renderMobileSelector();
   renderCoverageSelectors();
