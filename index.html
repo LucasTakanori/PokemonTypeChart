@@ -18,11 +18,11 @@
     </script>
     <meta
       name="description"
-      content="Practice modern Pokémon type matchups, analyze one- or two-type coverage, and sharpen recall with a quick quiz."
+      content="Practice modern Pokémon matchups with a full chart, randomized dual-type coverage challenges, and a quick quiz."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="stylesheet" href="/styles.css?v=20260813-coverage-v2" />
+    <link rel="stylesheet" href="/styles.css?v=20260813-coverage-quiz" />
     <title>Typewise — Pokémon Type Matchup Challenge</title>
   </head>
   <body>
@@ -57,12 +57,12 @@
             <p class="eyebrow"><span></span> Matchup memory lab</p>
             <h1 id="hero-title">Know your type.<br /><em>Own the matchup.</em></h1>
             <p class="hero-description">
-              Analyze offensive and defensive coverage for one or two types, fill the complete
-              chart, or sharpen your recall one matchup at a time.
+              Test offensive and defensive coverage for a random two-type Pokémon, fill the
+              complete chart, or sharpen your recall one matchup at a time.
             </p>
             <div class="hero-actions" aria-label="Choose a training tool">
               <a class="primary-link" href="/?view=coverage#workspace" data-view-target="coverage">
-                Analyze coverage
+                Test coverage
                 <span aria-hidden="true">→</span>
               </a>
               <a class="secondary-link" href="/?view=chart#workspace" data-view-target="chart">
@@ -266,34 +266,52 @@
             </div>
 
             <div id="coverage-panel" role="tabpanel" aria-labelledby="coverage-tab" hidden>
-              <div class="coverage-picker-card">
-                <div class="coverage-picker-copy">
-                  <p class="section-kicker">TEAM SLOT</p>
-                  <h3>Choose one or two types</h3>
-                  <p>See the best attacking option and the full defensive profile for this typing.</p>
+              <div class="coverage-challenge-card">
+                <div class="coverage-challenge-top">
+                  <div>
+                    <p class="section-kicker">COVERAGE CHALLENGE</p>
+                    <h3 id="coverage-question-title" tabindex="-1">Mark this typing’s matchups</h3>
+                  </div>
+                  <button class="button button-quiet" id="coverage-shuffle" type="button">
+                    New typing <span aria-hidden="true">↻</span>
+                  </button>
                 </div>
 
-                <fieldset class="coverage-selectors">
-                  <legend class="sr-only">Coverage types</legend>
-                  <label for="coverage-primary">
-                    <span>Primary type</span>
-                    <span class="coverage-select-wrap">
-                      <img id="coverage-primary-icon" src="/assets/type-icons/fire.svg" alt="" />
-                      <select id="coverage-primary"></select>
-                    </span>
-                  </label>
-                  <span class="coverage-plus" aria-hidden="true">+</span>
-                  <label for="coverage-secondary">
-                    <span>Secondary type</span>
-                    <span class="coverage-select-wrap">
-                      <img id="coverage-secondary-icon" src="/assets/type-icons/flying.svg" alt="" />
-                      <select id="coverage-secondary"></select>
-                    </span>
-                  </label>
-                </fieldset>
+                <div class="quick-matchup coverage-matchup" id="coverage-matchup"></div>
+                <p class="coverage-instructions">
+                  Mark every non-neutral type for offense and defense. Unmarked types count as ×1.
+                  Defensive ×4 counts as ×2, and ×¼ counts as ×½; the exact value appears with feedback.
+                </p>
+
+                <div class="coverage-toolbar">
+                  <div class="mode-control">
+                    <span class="control-label">Feedback mode</span>
+                    <button
+                      class="feedback-switch is-instant"
+                      id="coverage-feedback-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked="true"
+                      aria-describedby="coverage-mode-description"
+                    >
+                      <span class="switch-track" aria-hidden="true"><span></span></span>
+                      <span class="switch-copy">
+                        <strong id="coverage-feedback-title">Instant feedback</strong>
+                        <span class="mode-description" id="coverage-mode-description">Correct each marked type as you go.</span>
+                      </span>
+                    </button>
+                  </div>
+                  <div class="coverage-actions">
+                    <button class="button button-quiet" id="coverage-reset" type="button">Reset marks</button>
+                    <button class="button button-accent" id="coverage-check" type="button">
+                      <span aria-hidden="true">✓</span> Check coverage
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div class="coverage-results" id="coverage-results"></div>
+              <div class="coverage-summary" id="coverage-summary" tabindex="-1" hidden></div>
             </div>
 
             <div id="quick-panel" role="tabpanel" aria-labelledby="quick-tab" hidden>
@@ -362,7 +380,7 @@
               <span class="rule-number">03</span>
               <div class="rule-icon answer-rule" aria-hidden="true">×2</div>
               <h3>Call the multiplier</h3>
-              <p>Choose ×0, ×½, ×1, or ×2. Dual-type multipliers can be practiced by combining both.</p>
+              <p>Choose ×0, ×½, ×1, or ×2. Coverage challenges test a complete random dual typing.</p>
             </article>
           </div>
         </section>
@@ -394,6 +412,6 @@
 
     <div class="sr-only" id="live-region" aria-live="polite" aria-atomic="true"></div>
     <noscript>This interactive challenge needs JavaScript enabled.</noscript>
-    <script type="module" src="/app.js?v=20260813-coverage-v2"></script>
+    <script type="module" src="/app.js?v=20260813-coverage-quiz"></script>
   </body>
 </html>

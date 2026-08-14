@@ -3,9 +3,12 @@ import test from 'node:test';
 import {
   TYPE_CHART,
   TYPE_IDS,
+  coverageCategory,
+  coveragePairsExcluding,
   defensiveCoverage,
   effectiveness,
   offensiveCoverage,
+  scoreCoverageAnswers,
 } from '../chart-data.js';
 
 test('contains all 324 modern single-type matchups', () => {
@@ -95,4 +98,47 @@ test('coverage handles immunities, cancellation, and alternative moves', () => {
   assert.equal(groundFlying.rock, 1);
   assert.equal(offensiveCoverage(['normal', 'fighting']).ghost, 0);
   assert.equal(offensiveCoverage(['electric', 'fire']).ground, 1);
+});
+
+test('coverage quiz folds dual-type extremes into the requested answer categories', () => {
+  assert.equal(coverageCategory(4), 2);
+  assert.equal(coverageCategory(2), 2);
+  assert.equal(coverageCategory(1), 1);
+  assert.equal(coverageCategory(0.5), 0.5);
+  assert.equal(coverageCategory(0.25), 0.5);
+  assert.equal(coverageCategory(0), 0);
+  assert.throws(() => coverageCategory(3), RangeError);
+});
+
+test('coverage quiz scores unmarked types as neutral', () => {
+  const offense = offensiveCoverage(['fire', 'flying']);
+  const defense = defensiveCoverage(['fire', 'flying']);
+  const offenseAnswers = {
+    grass: 2, ice: 2, fighting: 2, bug: 2, steel: 2, rock: 0.5,
+  };
+  const defenseAnswers = {
+    rock: 2, water: 2, electric: 2,
+    fire: 0.5, fighting: 0.5, grass: 0.5, bug: 0.5, steel: 0.5, fairy: 0.5,
+    ground: 0,
+  };
+
+  assert.deepEqual(scoreCoverageAnswers(offense, offenseAnswers), {
+    correct: 18, incorrect: 0, total: 18,
+  });
+  assert.deepEqual(scoreCoverageAnswers(defense, defenseAnswers), {
+    correct: 18, incorrect: 0, total: 18,
+  });
+  assert.equal(scoreCoverageAnswers(offense).correct, 12);
+  assert.equal(scoreCoverageAnswers(defense).correct, 8);
+});
+
+test('coverage quiz offers every distinct unordered pair except the previous challenge', () => {
+  const allPairs = coveragePairsExcluding();
+  assert.equal(allPairs.length, 153);
+  assert.equal(new Set(allPairs.map((pair) => [...pair].sort().join('|'))).size, 153);
+  assert.ok(allPairs.every(([first, second]) => first !== second));
+
+  const withoutPrevious = coveragePairsExcluding(['flying', 'fire']);
+  assert.equal(withoutPrevious.length, 152);
+  assert.ok(!withoutPrevious.some((pair) => [...pair].sort().join('|') === 'fire|flying'));
 });

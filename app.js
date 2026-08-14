@@ -2,11 +2,14 @@ import {
   TYPE_CHART,
   TYPE_IDS,
   TYPES,
+  coverageCategory,
+  coveragePairsExcluding,
   defensiveCoverage,
   effectiveness,
   offensiveCoverage,
+  scoreCoverageAnswers,
   typeById,
-} from './chart-data.js?v=20260813-coverage-v2';
+} from './chart-data.js?v=20260813-coverage-quiz';
 
 const STORAGE_KEY = 'typewise-progress-v1';
 const LEGACY_BACKUP_KEY = 'typewise-progress-v1-legacy-sessions';
@@ -26,30 +29,7 @@ const VALUE_PHRASES = new Map([
   [2, 'is super effective against'],
 ]);
 
-const COVERAGE_LABELS = new Map([
-  [0, '×0'],
-  [0.25, '×¼'],
-  [0.5, '×½'],
-  [1, '×1'],
-  [2, '×2'],
-  [4, '×4'],
-]);
-
-const OFFENSIVE_GROUPS = [
-  { value: 2, title: 'Super effective' },
-  { value: 1, title: 'Neutral option' },
-  { value: 0.5, title: 'Best option resisted' },
-  { value: 0, title: 'No effective option' },
-];
-
-const DEFENSIVE_GROUPS = [
-  { value: 4, title: 'Double weakness' },
-  { value: 2, title: 'Weakness' },
-  { value: 1, title: 'Neutral damage' },
-  { value: 0.5, title: 'Resistance' },
-  { value: 0.25, title: 'Double resistance' },
-  { value: 0, title: 'Immunity' },
-];
+const COVERAGE_ANSWER_VALUES = [2, 0.5, 0, 1];
 
 const QUIZ_POOL = Object.fromEntries(
   VALID_VALUES.map((value) => [
@@ -82,8 +62,11 @@ const defaultState = () => ({
   },
   chart: defaultSession(),
   coverage: {
-    primary: 'fire',
-    secondary: 'flying',
+    question: null,
+    mode: 'practice',
+    selected: { offense: 2, defense: 2 },
+    answers: { offense: {}, defense: {} },
+    checked: false,
   },
   quick: {
     question: null,
@@ -129,11 +112,16 @@ const elements = {
   progressFill: document.querySelector('#progress-fill'),
   prompt: document.querySelector('#matchup-prompt'),
   results: document.querySelector('#results-panel'),
-  coveragePrimary: document.querySelector('#coverage-primary'),
-  coverageSecondary: document.querySelector('#coverage-secondary'),
-  coveragePrimaryIcon: document.querySelector('#coverage-primary-icon'),
-  coverageSecondaryIcon: document.querySelector('#coverage-secondary-icon'),
+  coverageMatchup: document.querySelector('#coverage-matchup'),
+  coverageQuestionTitle: document.querySelector('#coverage-question-title'),
+  coverageFeedbackToggle: document.querySelector('#coverage-feedback-toggle'),
+  coverageFeedbackTitle: document.querySelector('#coverage-feedback-title'),
+  coverageModeDescription: document.querySelector('#coverage-mode-description'),
+  coverageShuffle: document.querySelector('#coverage-shuffle'),
+  coverageReset: document.querySelector('#coverage-reset'),
+  coverageCheck: document.querySelector('#coverage-check'),
   coverageResults: document.querySelector('#coverage-results'),
+  coverageSummary: document.querySelector('#coverage-summary'),
   quickMatchup: document.querySelector('#quick-matchup'),
   quickOptions: document.querySelector('#quick-options'),
   quickFeedback: document.querySelector('#quick-feedback'),
@@ -246,12 +234,43 @@ function sanitizeQuick(rawQuick) {
   };
 }
 
+function sanitizeCoverageAnswerMap(rawAnswers) {
+  if (!rawAnswers || typeof rawAnswers !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(rawAnswers)
+      .filter(([type, value]) => isType(type) && [0, 0.5, 2].includes(Number(value)))
+      .map(([type, value]) => [type, Number(value)]),
+  );
+}
+
 function sanitizeCoverage(rawCoverage) {
-  const primary = isType(rawCoverage?.primary) ? rawCoverage.primary : 'fire';
-  const secondary = rawCoverage?.secondary === null || isType(rawCoverage?.secondary)
-    ? rawCoverage.secondary
-    : 'flying';
-  return { primary, secondary: secondary === primary ? null : secondary };
+  const rawTypes = Array.isArray(rawCoverage?.question?.types)
+    ? rawCoverage.question.types
+    : [rawCoverage?.primary, rawCoverage?.secondary];
+  const types = rawTypes.length === 2
+    && rawTypes.every(isType)
+    && rawTypes[0] !== rawTypes[1]
+    ? [...rawTypes]
+    : null;
+  const selectedValue = (direction) => COVERAGE_ANSWER_VALUES.includes(
+    Number(rawCoverage?.selected?.[direction]),
+  ) ? Number(rawCoverage.selected[direction]) : 2;
+
+  return {
+    question: types ? { types } : null,
+    mode: ['practice', 'test'].includes(rawCoverage?.mode)
+      ? rawCoverage.mode
+      : 'practice',
+    selected: {
+      offense: selectedValue('offense'),
+      defense: selectedValue('defense'),
+    },
+    answers: {
+      offense: sanitizeCoverageAnswerMap(rawCoverage?.answers?.offense),
+      defense: sanitizeCoverageAnswerMap(rawCoverage?.answers?.defense),
+    },
+    checked: Boolean(rawCoverage?.checked),
+  };
 }
 
 function loadState() {
@@ -399,94 +418,248 @@ function renderMobileRow() {
 }
 
 function selectedCoverageTypes() {
-  return [...new Set([state.coverage.primary, state.coverage.secondary].filter(Boolean))];
+  return state.coverage.question?.types ?? [];
 }
 
-function coverageTypeChip(type) {
+function formatCoverageMultiplier(value) {
+  if (Number(value) === 0.25) return '×¼';
+  if (Number(value) === 4) return '×4';
+  return formatMultiplier(value);
+}
+
+function chooseCoverageQuestion() {
+  const pool = coveragePairsExcluding(state.coverage.question?.types);
+  const types = pool[randomIndex(pool.length)];
+
+  state.coverage.question = { types };
+  state.coverage.answers = { offense: {}, defense: {} };
+  state.coverage.checked = false;
+  saveState();
+}
+
+function coverageProfiles() {
+  const selectedTypes = selectedCoverageTypes();
+  const offenseExact = offensiveCoverage(selectedTypes);
+  const defenseExact = defensiveCoverage(selectedTypes);
+  return {
+    offense: offenseExact,
+    defense: Object.fromEntries(
+      TYPE_IDS.map((type) => [type, coverageCategory(defenseExact[type])]),
+    ),
+    exact: { offense: offenseExact, defense: defenseExact },
+  };
+}
+
+function coverageStats(profiles = coverageProfiles()) {
+  const offense = scoreCoverageAnswers(
+    profiles.exact.offense,
+    state.coverage.answers.offense,
+  );
+  const defense = scoreCoverageAnswers(
+    profiles.exact.defense,
+    state.coverage.answers.defense,
+  );
+  return {
+    offense,
+    defense,
+    correct: offense.correct + defense.correct,
+    incorrect: offense.incorrect + defense.incorrect,
+  };
+}
+
+function coveragePaletteMarkup(direction) {
+  const selected = state.coverage.selected[direction];
+  const labels = direction === 'offense'
+    ? { 2: 'Super', 0.5: 'Resisted', 0: 'No effect', 1: 'Clear' }
+    : { 2: 'Weak', 0.5: 'Resists', 0: 'Immune', 1: 'Clear' };
   return `
-    <li class="coverage-type-chip" style="${typeStyle(type)}">
-      ${typeIconMarkup(type)}
-      <span>${type.name}</span>
-    </li>
+    <div class="coverage-answer-palette" role="radiogroup" aria-label="${direction === 'offense' ? 'Offensive' : 'Defensive'} multiplier">
+      ${COVERAGE_ANSWER_VALUES.map((value) => `
+        <button type="button" role="radio" aria-checked="${selected === value}"
+          tabindex="${selected === value ? '0' : '-1'}"
+          class="${selected === value ? 'is-active' : ''}"
+          data-coverage-palette="${direction}" data-coverage-value="${value}">
+          <strong>${formatMultiplier(value)}</strong><span>${labels[value]}</span>
+        </button>
+      `).join('')}
+    </div>
   `;
 }
 
-function coverageGroupMarkup(profile, { value, title }) {
-  const matchingTypes = TYPES.filter((type) => profile[type.id] === value);
-  const valueClass = String(value).replace('.', '-');
-  return `
-    <section class="coverage-group coverage-value-${valueClass}" aria-labelledby="coverage-${valueClass}-${title.replaceAll(' ', '-').toLowerCase()}">
-      <div class="coverage-group-heading">
-        <strong>${COVERAGE_LABELS.get(value)}</strong>
-        <h4 id="coverage-${valueClass}-${title.replaceAll(' ', '-').toLowerCase()}">${title}</h4>
-        <small>${matchingTypes.length} ${matchingTypes.length === 1 ? 'type' : 'types'}</small>
-      </div>
-      ${matchingTypes.length
-        ? `<ul class="coverage-type-list">${matchingTypes.map(coverageTypeChip).join('')}</ul>`
-        : '<p class="coverage-empty">None</p>'}
-    </section>
-  `;
-}
-
-function renderCoverageSelectors() {
-  if (!elements.coveragePrimary.options.length) {
-    elements.coveragePrimary.innerHTML = TYPES.map(
-      (type) => `<option value="${type.id}">${type.name}</option>`,
-    ).join('');
-    elements.coverageSecondary.innerHTML = `
-      <option value="">None — single type</option>
-      ${TYPES.map((type) => `<option value="${type.id}">${type.name}</option>`).join('')}
-    `;
+function coverageTileMarkup(direction, type, profiles) {
+  const answers = state.coverage.answers[direction];
+  const answered = hasAnswer(answers, type.id);
+  const answer = answered ? Number(answers[type.id]) : 1;
+  const correctValue = profiles[direction][type.id];
+  const exactValue = profiles.exact[direction][type.id];
+  const evaluated = state.coverage.checked || (state.coverage.mode === 'practice' && answered);
+  const correct = evaluated && answer === correctValue;
+  const incorrect = evaluated && answer !== correctValue;
+  const exactDetail = direction === 'defense' && exactValue !== correctValue
+    ? ` Exact multiplier ${formatCoverageMultiplier(exactValue)}.`
+    : '';
+  let status = answered ? `your answer ${formatMultiplier(answer)}` : 'default ×1';
+  if (evaluated) {
+    status += correct
+      ? `, correct.${exactDetail}`
+      : `, incorrect; correct category ${formatMultiplier(correctValue)}.${exactDetail}`;
   }
+  const correction = evaluated
+    ? correct
+      ? `<span class="coverage-tile-feedback is-correct" aria-hidden="true">✓${exactDetail ? ` exact ${formatCoverageMultiplier(exactValue)}` : ''}</span>`
+      : `<span class="coverage-tile-feedback is-wrong" aria-hidden="true">→ ${formatMultiplier(correctValue)}${exactDetail ? ` · exact ${formatCoverageMultiplier(exactValue)}` : ''}</span>`
+    : '';
+  const roleDescription = direction === 'offense'
+    ? 'defending target'
+    : 'incoming attack against this typing';
 
-  elements.coveragePrimary.value = state.coverage.primary;
-  elements.coverageSecondary.value = state.coverage.secondary ?? '';
-  [...elements.coverageSecondary.options].forEach((option) => {
-    option.disabled = option.value === state.coverage.primary;
-  });
-  elements.coveragePrimaryIcon.src = typeById(state.coverage.primary).icon;
-  const secondaryType = state.coverage.secondary ? typeById(state.coverage.secondary) : null;
-  elements.coverageSecondaryIcon.hidden = !secondaryType;
-  if (secondaryType) elements.coverageSecondaryIcon.src = secondaryType.icon;
+  return `
+    <button class="coverage-quiz-type${answered ? ' is-answered' : ' is-default'}${correct ? ' is-correct' : ''}${incorrect ? ' is-incorrect' : ''}"
+      type="button" style="${typeStyle(type)}" data-coverage-direction="${direction}"
+      data-coverage-type="${type.id}" aria-pressed="${answered}"
+      aria-label="${type.name}, ${roleDescription}, ${status}">
+      ${typeIconMarkup(type)}
+      <span class="coverage-quiz-type-name">${type.name}</span>
+      <strong class="coverage-quiz-value">${formatMultiplier(answer)}</strong>
+      ${correction}
+    </button>
+  `;
+}
+
+function coverageBoardMarkup(direction, profiles) {
+  const offense = direction === 'offense';
+  const answers = state.coverage.answers[direction];
+  const marked = Object.keys(answers).length;
+  return `
+    <article class="coverage-card coverage-quiz-card" aria-labelledby="${direction}-coverage-title">
+      <header class="coverage-card-heading">
+        <span class="coverage-direction ${offense ? 'is-offense' : 'is-defense'}" aria-hidden="true">${offense ? '→' : '←'}</span>
+        <div>
+          <p class="section-kicker">${offense ? 'OFFENSIVE COVERAGE' : 'DEFENSIVE COVERAGE'}</p>
+          <h3 id="${direction}-coverage-title">${offense ? 'Best attacking option' : 'Incoming damage'}</h3>
+          <p>${offense
+            ? 'For each defending type, use whichever of the two attack types works better.'
+            : 'For each incoming attack type, judge its matchup against the combined typing.'}</p>
+        </div>
+      </header>
+      ${coveragePaletteMarkup(direction)}
+      <div class="coverage-board-count"><strong>${marked} marked</strong><span>${TYPE_IDS.length - marked} default ×1</span></div>
+      <div class="coverage-quiz-grid" aria-label="${offense ? 'Offensive targets' : 'Defensive incoming attacks'}">
+        ${TYPES.map((type) => coverageTileMarkup(direction, type, profiles)).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderCoverageSummary(stats) {
+  elements.coverageSummary.hidden = !state.coverage.checked;
+  if (!state.coverage.checked) {
+    elements.coverageSummary.innerHTML = '';
+    return;
+  }
+  const percent = Math.round((stats.correct / (TYPE_IDS.length * 2)) * 100);
+  elements.coverageSummary.innerHTML = `
+    <div class="result-badge" aria-hidden="true">${percent}%</div>
+    <div class="results-copy">
+      <h3>${stats.incorrect ? 'Coverage checked — review the marked corrections.' : 'Perfect coverage. Every type is correct.'}</h3>
+      <p>${stats.correct} of ${TYPE_IDS.length * 2} correct · Offense ${stats.offense.correct}/${TYPE_IDS.length} · Defense ${stats.defense.correct}/${TYPE_IDS.length}. Unmarked types were scored as ×1.</p>
+    </div>
+    <button class="button button-accent" type="button" data-coverage-action="next">Next typing <span aria-hidden="true">→</span></button>
+  `;
 }
 
 function renderCoverage() {
-  renderCoverageSelectors();
+  if (!state.coverage.question) chooseCoverageQuestion();
   const selectedTypes = selectedCoverageTypes();
-  const typeNames = selectedTypes.map((type) => typeById(type).name);
-  const offense = offensiveCoverage(selectedTypes);
-  const defense = defensiveCoverage(selectedTypes);
-  const typingLabel = typeNames.join(' / ');
+  const first = typeById(selectedTypes[0]);
+  const second = typeById(selectedTypes[1]);
+  const profiles = coverageProfiles();
+  const stats = coverageStats(profiles);
+
+  elements.coverageQuestionTitle.textContent = `${first.name} / ${second.name} coverage challenge`;
+  elements.coverageMatchup.innerHTML = `
+    ${quickTypeMarkup(first, 'TYPE 1')}
+    <div class="versus-arrow coverage-plus-mark" aria-hidden="true"><span>+</span></div>
+    ${quickTypeMarkup(second, 'TYPE 2')}
+    <span class="sr-only">${first.name} and ${second.name} dual typing</span>
+  `;
 
   elements.coverageResults.innerHTML = `
-    <article class="coverage-card" aria-labelledby="offensive-coverage-title">
-      <header class="coverage-card-heading">
-        <span class="coverage-direction is-offense" aria-hidden="true">→</span>
-        <div>
-          <p class="section-kicker">OFFENSIVE COVERAGE</p>
-          <h3 id="offensive-coverage-title">Best attacking option</h3>
-          <p>Uses whichever selected attack type has the stronger matchup against each single type. STAB is not included.</p>
-        </div>
-      </header>
-      <div class="coverage-groups">
-        ${OFFENSIVE_GROUPS.map((group) => coverageGroupMarkup(offense, group)).join('')}
-      </div>
-    </article>
-
-    <article class="coverage-card" aria-labelledby="defensive-coverage-title">
-      <header class="coverage-card-heading">
-        <span class="coverage-direction is-defense" aria-hidden="true">←</span>
-        <div>
-          <p class="section-kicker">DEFENSIVE PROFILE</p>
-          <h3 id="defensive-coverage-title">Damage received by ${typingLabel}</h3>
-          <p>${typeNames.length === 1 ? 'Shows this type’s' : 'Multiplies both types’'} matchup against every incoming attack type.</p>
-        </div>
-      </header>
-      <div class="coverage-groups">
-        ${DEFENSIVE_GROUPS.map((group) => coverageGroupMarkup(defense, group)).join('')}
-      </div>
-    </article>
+    ${coverageBoardMarkup('offense', profiles)}
+    ${coverageBoardMarkup('defense', profiles)}
   `;
+  elements.coverageCheck.innerHTML = state.coverage.checked
+    ? '<span aria-hidden="true">✓</span> Recheck coverage'
+    : '<span aria-hidden="true">✓</span> Check coverage';
+  elements.coverageReset.disabled = !Object.keys(state.coverage.answers.offense).length
+    && !Object.keys(state.coverage.answers.defense).length;
+  renderCoverageSummary(stats);
+}
+
+function generateCoverageQuestion({ focus = true } = {}) {
+  chooseCoverageQuestion();
+  renderCoverage();
+  announce(`New coverage challenge: ${selectedCoverageTypes().map((type) => typeById(type).name).join(' and ')}.`);
+  if (focus) elements.coverageQuestionTitle.focus();
+}
+
+function setCoverageMultiplier(direction, value, { focus = true } = {}) {
+  state.coverage.selected[direction] = Number(value);
+  saveState();
+  renderCoverage();
+  announce(`${formatMultiplier(value)} selected for ${direction}.`);
+  if (focus) {
+    elements.coverageResults.querySelector(
+      `[data-coverage-palette="${direction}"][data-coverage-value="${value}"]`,
+    )?.focus();
+  }
+}
+
+function toggleCoverageAnswer(direction, type) {
+  const answers = state.coverage.answers[direction];
+  const selected = state.coverage.selected[direction];
+  const alreadySelected = hasAnswer(answers, type) && Number(answers[type]) === selected;
+  if (selected === 1 || alreadySelected) delete answers[type];
+  else answers[type] = selected;
+  saveState();
+
+  const profiles = coverageProfiles();
+  const answer = hasAnswer(answers, type) ? Number(answers[type]) : 1;
+  const correctValue = profiles[direction][type];
+  const evaluated = state.coverage.checked || state.coverage.mode === 'practice';
+  renderCoverage();
+  elements.coverageResults.querySelector(
+    `[data-coverage-direction="${direction}"][data-coverage-type="${type}"]`,
+  )?.focus();
+
+  const typeName = typeById(type).name;
+  if (evaluated && hasAnswer(answers, type)) {
+    announce(answer === correctValue
+      ? `Correct. ${typeName} is ${formatMultiplier(correctValue)} for ${direction}.`
+      : `Not quite. ${typeName} is ${formatMultiplier(correctValue)} for ${direction}.`);
+  } else {
+    announce(hasAnswer(answers, type)
+      ? `${formatMultiplier(answer)} marked for ${typeName} in ${direction}.`
+      : `${typeName} cleared to default ×1 in ${direction}.`);
+  }
+}
+
+function checkCoverageAnswers() {
+  state.coverage.checked = true;
+  saveState();
+  const stats = coverageStats();
+  renderCoverage();
+  announce(`Coverage scored. ${stats.correct} of ${TYPE_IDS.length * 2} answers are correct.`);
+  elements.coverageSummary.focus({ preventScroll: true });
+  elements.coverageSummary.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function resetCoverageAnswers() {
+  state.coverage.answers = { offense: {}, defense: {} };
+  state.coverage.checked = false;
+  saveState();
+  renderCoverage();
+  announce('Coverage marks reset. Every type is back to the default ×1.');
 }
 
 function selectMultiplier(value, shouldAnnounce = true) {
@@ -522,7 +695,7 @@ function setView(view, { focusPanel = false } = {}) {
       ? 'Attacking types run down the left. Defending types run across the top.'
       : 'Defending types run down the left. Attacking types run across the top.';
   } else if (view === 'coverage') {
-    elements.axisDescription.textContent = 'Combine one or two types to inspect offensive coverage and defensive matchups.';
+    elements.axisDescription.textContent = 'Test offensive and defensive coverage for a random two-type Pokémon.';
   } else {
     elements.axisDescription.textContent = 'Build fast recall with one random attacking and defending matchup at a time.';
   }
@@ -589,6 +762,24 @@ function setMode(mode, { shouldAnnounce = true, shouldSave = true } = {}) {
   if (shouldSave) saveState();
   updateChartView();
   if (shouldAnnounce) announce(`${instant ? 'Instant feedback' : 'Score when ready'} selected.`);
+}
+
+function setCoverageMode(mode, { shouldAnnounce = true, shouldSave = true } = {}) {
+  const nextMode = mode === 'test' ? 'test' : 'practice';
+  const changed = state.coverage.mode !== nextMode;
+  state.coverage.mode = nextMode;
+  if (changed) state.coverage.checked = false;
+  const instant = nextMode === 'practice';
+  elements.coverageFeedbackToggle.classList.toggle('is-instant', instant);
+  elements.coverageFeedbackToggle.setAttribute('aria-checked', String(instant));
+  elements.coverageFeedbackToggle.setAttribute('aria-label', 'Instant feedback');
+  elements.coverageFeedbackTitle.textContent = 'Instant feedback';
+  elements.coverageModeDescription.textContent = instant
+    ? 'Correct each marked type as you go.'
+    : 'Hide results until you check coverage.';
+  if (shouldSave) saveState();
+  if (state.view === 'coverage') renderCoverage();
+  if (shouldAnnounce) announce(`${instant ? 'Instant feedback' : 'Score when ready'} selected for Coverage.`);
 }
 
 function recordAnswer(attack, defense, value = state.selected, { advance = false } = {}) {
@@ -1098,21 +1289,45 @@ function bindEvents() {
     setAxis(rowsAreAttackers() ? 'defense-rows' : 'attack-rows');
   });
 
-  elements.coveragePrimary.addEventListener('change', () => {
-    const oldPrimary = state.coverage.primary;
-    const nextPrimary = elements.coveragePrimary.value;
-    if (state.coverage.secondary === nextPrimary) state.coverage.secondary = oldPrimary;
-    state.coverage.primary = nextPrimary;
-    saveState();
-    renderCoverage();
-    announce(`Coverage updated for ${selectedCoverageTypes().map((type) => typeById(type).name).join(' and ')}.`);
+  elements.coverageFeedbackToggle.addEventListener('click', () => {
+    setCoverageMode(state.coverage.mode === 'practice' ? 'test' : 'practice');
+  });
+  elements.coverageShuffle.addEventListener('click', () => generateCoverageQuestion());
+  elements.coverageReset.addEventListener('click', resetCoverageAnswers);
+  elements.coverageCheck.addEventListener('click', checkCoverageAnswers);
+
+  elements.coverageResults.addEventListener('click', (event) => {
+    const paletteButton = event.target.closest('[data-coverage-palette]');
+    if (paletteButton) {
+      setCoverageMultiplier(
+        paletteButton.dataset.coveragePalette,
+        Number(paletteButton.dataset.coverageValue),
+      );
+      return;
+    }
+    const typeButton = event.target.closest('[data-coverage-direction][data-coverage-type]');
+    if (typeButton) {
+      toggleCoverageAnswer(typeButton.dataset.coverageDirection, typeButton.dataset.coverageType);
+    }
   });
 
-  elements.coverageSecondary.addEventListener('change', () => {
-    state.coverage.secondary = elements.coverageSecondary.value || null;
-    saveState();
-    renderCoverage();
-    announce(`Coverage updated for ${selectedCoverageTypes().map((type) => typeById(type).name).join(' and ')}.`);
+  elements.coverageResults.addEventListener('keydown', (event) => {
+    const paletteButton = event.target.closest('[data-coverage-palette]');
+    if (!paletteButton || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const direction = paletteButton.dataset.coveragePalette;
+    const buttons = [...elements.coverageResults.querySelectorAll(`[data-coverage-palette="${direction}"]`)];
+    const currentIndex = buttons.indexOf(paletteButton);
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = buttons.length - 1;
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+    else nextIndex = (currentIndex + 1) % buttons.length;
+    setCoverageMultiplier(direction, Number(buttons[nextIndex].dataset.coverageValue));
+  });
+
+  elements.coverageSummary.addEventListener('click', (event) => {
+    if (event.target.closest('[data-coverage-action="next"]')) generateCoverageQuestion();
   });
 
   elements.palette.forEach((button) => {
@@ -1248,14 +1463,19 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', (event) => {
-    if (state.view !== 'quick' || event.target.matches('input, select, textarea, button')) return;
+    if (event.target.matches('input, select, textarea, button')) return;
     const keyValues = { 0: 0, h: 0.5, H: 0.5, 1: 1, 2: 2 };
-    if (state.quick.answer === null && Object.prototype.hasOwnProperty.call(keyValues, event.key)) {
+    if (state.view === 'quick' && state.quick.answer === null && Object.prototype.hasOwnProperty.call(keyValues, event.key)) {
       event.preventDefault();
       answerQuick(keyValues[event.key]);
-    } else if (state.quick.answer !== null && event.key === 'Enter') {
+    } else if (state.view === 'quick' && state.quick.answer !== null && event.key === 'Enter') {
       event.preventDefault();
       nextQuestion();
+    } else if (state.view === 'coverage' && Object.prototype.hasOwnProperty.call(keyValues, event.key)) {
+      event.preventDefault();
+      const direction = document.activeElement.closest?.('[data-coverage-direction]')?.dataset.coverageDirection
+        ?? 'offense';
+      setCoverageMultiplier(direction, keyValues[event.key]);
     }
   });
 }
@@ -1265,12 +1485,12 @@ function initialize() {
   if (['chart', 'coverage', 'quick'].includes(requestedView)) state.view = requestedView;
   renderDesktopChart();
   renderMobileSelector();
-  renderCoverageSelectors();
   bindEvents();
   setTheme(state.theme, { shouldSave: false });
   setAxis(state.axis, { shouldAnnounce: false, shouldSave: false });
   selectMultiplier(state.selected, false);
   setMode(state.mode, { shouldAnnounce: false, shouldSave: false });
+  setCoverageMode(state.coverage.mode, { shouldAnnounce: false, shouldSave: false });
   setView(state.view);
   renderQuick();
   updateChartView();

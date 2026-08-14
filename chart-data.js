@@ -24,6 +24,21 @@ export const TYPES = [
 
 export const TYPE_IDS = TYPES.map((type) => type.id);
 
+const COVERAGE_PAIRS = TYPE_IDS.flatMap((first, index) =>
+  TYPE_IDS.slice(index + 1).map((second) => [first, second]));
+
+export function coveragePairsExcluding(previousTypes = []) {
+  const previousKey = Array.isArray(previousTypes)
+    && previousTypes.length === 2
+    && previousTypes.every((type) => TYPE_IDS.includes(type))
+    && previousTypes[0] !== previousTypes[1]
+    ? [...previousTypes].sort().join('|')
+    : null;
+  return COVERAGE_PAIRS
+    .filter((types) => [...types].sort().join('|') !== previousKey)
+    .map((types) => [...types]);
+}
+
 // Modern core-series chart (Generation VI onward). Omitted matchups are neutral.
 export const MATCHUPS = {
   normal: { half: ['rock', 'steel'], zero: ['ghost'] },
@@ -87,6 +102,38 @@ export function defensiveCoverage(typeIds) {
       ),
     ]),
   );
+}
+
+export function coverageCategory(multiplier) {
+  const value = Number(multiplier);
+  if (![0, 0.25, 0.5, 1, 2, 4].includes(value)) {
+    throw new RangeError(`Unknown coverage multiplier: ${multiplier}`);
+  }
+  if (value === 0) return 0;
+  if (value < 1) return 0.5;
+  if (value > 1) return 2;
+  return 1;
+}
+
+export function scoreCoverageAnswers(profile, answers = {}) {
+  if (!profile || typeof profile !== 'object' || !answers || typeof answers !== 'object') {
+    throw new TypeError('Coverage profile and answers must be objects.');
+  }
+  if (Object.keys(answers).some((type) => !TYPE_IDS.includes(type))) {
+    throw new RangeError('Coverage answers contain an unknown Pokémon type.');
+  }
+
+  const correct = TYPE_IDS.reduce((count, type) => {
+    const expected = coverageCategory(profile[type]);
+    const answer = Object.prototype.hasOwnProperty.call(answers, type)
+      ? Number(answers[type])
+      : 1;
+    if (![0, 0.5, 1, 2].includes(answer)) {
+      throw new RangeError(`Unknown coverage answer: ${answers[type]}`);
+    }
+    return count + Number(answer === expected);
+  }, 0);
+  return { correct, incorrect: TYPE_IDS.length - correct, total: TYPE_IDS.length };
 }
 
 export const TYPE_CHART = Object.fromEntries(
